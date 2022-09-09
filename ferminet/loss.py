@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Helper functions to create the loss and custom gradient of the loss."""
 
 from typing import Tuple
@@ -36,6 +35,10 @@ class AuxiliaryLossData:
   """
   variance: jnp.DeviceArray
   local_energy: jnp.DeviceArray
+  k: jnp.DeviceArray
+  v_ee: jnp.DeviceArray
+  v_ae: jnp.DeviceArray
+  v_aa: jnp.DeviceArray
 
 
 class LossFn(Protocol):
@@ -113,10 +116,18 @@ def make_loss(network: networks.LogFermiNetLike,
       over the batch and over all devices inside a pmap.
     """
     keys = jax.random.split(key, num=data.shape[0])
-    e_l = batch_local_energy(params, keys, data)
+    k, v_ee, v_ae, v_aa = batch_local_energy(params, keys, data)
+    e_l = k + v_ee + v_ae + v_aa
     loss = constants.pmean(jnp.mean(e_l))
     variance = constants.pmean(jnp.mean((e_l - loss)**2))
-    return loss, AuxiliaryLossData(variance=variance, local_energy=e_l)
+    return loss, AuxiliaryLossData(
+        variance=variance,
+        local_energy=e_l,
+        k=k,
+        v_ee=v_ee,
+        v_ae=v_ae,
+        v_aa=v_aa,
+    )
 
   @total_energy.defjvp
   def total_energy_jvp(primals, tangents):  # pylint: disable=unused-variable
@@ -128,8 +139,7 @@ def make_loss(network: networks.LogFermiNetLike,
       # Try centering the window around the median instead of the mean?
       tv = jnp.mean(jnp.abs(aux_data.local_energy - loss))
       tv = constants.pmean(tv)
-      diff = jnp.clip(aux_data.local_energy,
-                      loss - clip_local_energy * tv,
+      diff = jnp.clip(aux_data.local_energy, loss - clip_local_energy * tv,
                       loss + clip_local_energy * tv) - loss
     else:
       diff = aux_data.local_energy - loss

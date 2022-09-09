@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Implementation of Fermionic Neural Network in JAX."""
 import enum
 import functools
@@ -26,7 +25,6 @@ from ferminet.utils import scf
 import jax
 import jax.numpy as jnp
 from typing_extensions import Protocol
-
 
 FermiLayers = Tuple[Tuple[int, int], ...]
 # Recursive types are not yet supported in pytype - b/109648354.
@@ -73,6 +71,7 @@ class LogFermiNetLike(Protocol):
         dimensionality of the system.
     """
 
+
 ## Interfaces (network components) ##
 
 
@@ -118,10 +117,7 @@ class FeatureLayerType(enum.Enum):
 
 class MakeFeatureLayer(Protocol):
 
-  def __call__(self,
-               charges: jnp.ndarray,
-               nspins: Sequence[int],
-               ndim: int,
+  def __call__(self, charges: jnp.ndarray, nspins: Sequence[int], ndim: int,
                **kwargs: Any) -> FeatureLayer:
     """Builds the FeatureLayer object.
 
@@ -164,14 +160,17 @@ class FermiNetOptions:
   use_last_layer: bool = False
   determinants: int = 16
   full_det: bool = True
+  activation: str = 'tanh'
   bias_orbitals: bool = False
   envelope: envelopes.Envelope = attr.ib(
-      default=attr.Factory(
-          envelopes.make_isotropic_envelope,
-          takes_self=False))
-  feature_layer: FeatureLayer = attr.ib(
-      default=attr.Factory(
-          lambda self: make_ferminet_features(ndim=self.ndim), takes_self=True))
+      default=attr.Factory(envelopes.make_isotropic_envelope, takes_self=False))
+  feature_layer: FeatureLayer = attr.ib(default=attr.Factory(
+      lambda self: make_ferminet_features(ndim=self.ndim), takes_self=True))
+  use_nci: bool = False
+  nci_dims: Sequence[int] = (256, 256)
+  nci_act: str = 'leaky_relu'
+  nci_clip: Optional[float] = None
+  nci_tau: float = 1.0
 
 
 ## Network initialisation ##
@@ -221,20 +220,18 @@ def init_layers(
   for i in range(len(dims_one_in)):
     key, subkey = jax.random.split(key)
     single.append(
-        network_blocks.init_linear_layer(
-            subkey,
-            in_dim=dims_one_in[i],
-            out_dim=dims_one_out[i],
-            include_bias=True))
+        network_blocks.init_linear_layer(subkey,
+                                         in_dim=dims_one_in[i],
+                                         out_dim=dims_one_out[i],
+                                         include_bias=True))
 
     if i < ndouble_layers:
       key, subkey = jax.random.split(key)
       double.append(
-          network_blocks.init_linear_layer(
-              subkey,
-              in_dim=dims_two_in[i],
-              out_dim=dims_two_out[i],
-              include_bias=True))
+          network_blocks.init_linear_layer(subkey,
+                                           in_dim=dims_two_in[i],
+                                           out_dim=dims_two_out[i],
+                                           include_bias=True))
 
   return single, double
 
@@ -261,11 +258,10 @@ def init_orbital_shaping(
   for nspin_orbital in nspin_orbitals:
     key, subkey = jax.random.split(key)
     orbitals.append(
-        network_blocks.init_linear_layer(
-            subkey,
-            in_dim=input_dim,
-            out_dim=nspin_orbital,
-            include_bias=bias_orbitals))
+        network_blocks.init_linear_layer(subkey,
+                                         in_dim=input_dim,
+                                         out_dim=nspin_orbital,
+                                         include_bias=bias_orbitals))
   return orbitals
 
 
@@ -374,8 +370,8 @@ def init_fermi_net_params(
     raise ValueError('No electrons present!')
 
   params = {}
-  (num_one_features, num_two_features), params['input'] = (
-      options.feature_layer.init())
+  (num_one_features,
+   num_two_features), params['input'] = (options.feature_layer.init())
 
   # The input to layer L of the one-electron stream is from
   # construct_symmetric_features and shape (nelectrons, nfeatures), where
@@ -429,12 +425,11 @@ def init_fermi_net_params(
 
   # Layer initialisation
   key, subkey = jax.random.split(key, num=2)
-  params['single'], params['double'] = init_layers(
-      key=subkey,
-      dims_one_in=dims_one_in,
-      dims_one_out=dims_one_out,
-      dims_two_in=dims_two_in,
-      dims_two_out=dims_two_out)
+  params['single'], params['double'] = init_layers(key=subkey,
+                                                   dims_one_in=dims_one_in,
+                                                   dims_one_out=dims_one_out,
+                                                   dims_two_in=dims_two_in,
+                                                   dims_two_out=dims_two_out)
 
   # create envelope params
   if options.envelope.apply_type == envelopes.EnvelopeType.PRE_ORBITAL:
@@ -448,16 +443,17 @@ def init_fermi_net_params(
     output_dims = 1
   else:
     raise ValueError('Unknown envelope type')
-  params['envelope'] = options.envelope.init(
-      natom=natom, output_dims=output_dims, hf=hf_solution, ndim=ndim)
+  params['envelope'] = options.envelope.init(natom=natom,
+                                             output_dims=output_dims,
+                                             hf=hf_solution,
+                                             ndim=ndim)
 
   # orbital shaping
   key, subkey = jax.random.split(key, num=2)
-  params['orbital'] = init_orbital_shaping(
-      key=subkey,
-      input_dim=dims_orbital_in,
-      nspin_orbitals=nspin_orbitals,
-      bias_orbitals=options.bias_orbitals)
+  params['orbital'] = init_orbital_shaping(key=subkey,
+                                           input_dim=dims_orbital_in,
+                                           nspin_orbitals=nspin_orbitals,
+                                           bias_orbitals=options.bias_orbitals)
 
   if hf_solution is not None:
     params['single'], params['orbital'] = init_to_hf_solution(
@@ -468,7 +464,17 @@ def init_fermi_net_params(
         active_spin_channels=active_spin_channels,
         eps=eps)
 
+  # neural CI params
+  if options.use_nci:
+    key, subkey = jax.random.split(key, num=2)
+    params['nci'] = network_blocks.init_nci(
+        key=subkey,
+        input_dim=options.determinants,
+        nci_dims=options.nci_dims,
+    )
+
   return params
+
 
 ## Network layers ##
 
@@ -500,8 +506,8 @@ def construct_input_features(
   r_ae = jnp.linalg.norm(ae, axis=2, keepdims=True)
   # Avoid computing the norm of zero, as is has undefined grad
   n = ee.shape[0]
-  r_ee = (
-      jnp.linalg.norm(ee + jnp.eye(n)[..., None], axis=-1) * (1.0 - jnp.eye(n)))
+  r_ee = (jnp.linalg.norm(ee + jnp.eye(n)[..., None], axis=-1) *
+          (1.0 - jnp.eye(n)))
 
   return ae, ee, r_ae, r_ee[..., None]
 
@@ -593,8 +599,13 @@ def fermi_net_orbitals(
   """
 
   ae, ee, r_ae, r_ee = construct_input_features(pos, atoms)
-  ae_features, ee_features = options.feature_layer.apply(
-      ae=ae, r_ae=r_ae, ee=ee, r_ee=r_ee, **params['input'])
+  ae_features, ee_features = options.feature_layer.apply(ae=ae,
+                                                         r_ae=r_ae,
+                                                         ee=ee,
+                                                         r_ee=r_ee,
+                                                         **params['input'])
+
+  act_fn = getattr(jax.nn, options.activation)
 
   h_one = ae_features  # single-electron features
   h_two = ee_features  # two-electron features
@@ -603,28 +614,31 @@ def fermi_net_orbitals(
     h_one_in = construct_symmetric_features(h_one, h_two, nspins)
 
     # Execute next layer
-    h_one_next = jnp.tanh(
+    h_one_next = act_fn(
         network_blocks.linear_layer(h_one_in, **params['single'][i]))
-    h_two_next = jnp.tanh(
+    h_two_next = act_fn(
         network_blocks.vmap_linear_layer(h_two, params['double'][i]['w'],
                                          params['double'][i]['b']))
     h_one = residual(h_one, h_one_next)
     h_two = residual(h_two, h_two_next)
   if len(params['double']) != len(params['single']):
     h_one_in = construct_symmetric_features(h_one, h_two, nspins)
-    h_one_next = jnp.tanh(
+    h_one_next = act_fn(
         network_blocks.linear_layer(h_one_in, **params['single'][-1]))
     h_one = residual(h_one, h_one_next)
     h_to_orbitals = h_one
   else:
     h_to_orbitals = construct_symmetric_features(h_one, h_two, nspins)
   if options.envelope.apply_type == envelopes.EnvelopeType.PRE_ORBITAL:
-    envelope_factor = options.envelope.apply(
-        ae=ae, r_ae=r_ae, r_ee=r_ee, **params['envelope'])
+    envelope_factor = options.envelope.apply(ae=ae,
+                                             r_ae=r_ae,
+                                             r_ee=r_ee,
+                                             **params['envelope'])
     h_to_orbitals = envelope_factor * h_to_orbitals
   # Note split creates arrays of size 0 for spin channels without any electrons.
-  h_to_orbitals = jnp.split(
-      h_to_orbitals, network_blocks.array_partitions(nspins), axis=0)
+  h_to_orbitals = jnp.split(h_to_orbitals,
+                            network_blocks.array_partitions(nspins),
+                            axis=0)
   # Drop unoccupied spin channels
   h_to_orbitals = [h for h, spin in zip(h_to_orbitals, nspins) if spin > 0]
   active_spin_channels = [spin for spin in nspins if spin > 0]
@@ -658,6 +672,7 @@ def fermi_net_orbitals(
   if options.full_det:
     orbitals = [jnp.concatenate(orbitals, axis=1)]
   return orbitals, (ae, r_ae, r_ee)
+
 
 ## FermiNet ##
 
@@ -701,7 +716,24 @@ def fermi_net(
       nspins=nspins,
       options=options,
   )
-  output = network_blocks.logdet_matmul(orbitals)
+
+  if options.use_nci:  # neural CI in log domain
+
+    def logdet_transform(sign_in, logdet):
+      for i in range(len(params['nci'])):
+        logdet, sign_in = network_blocks.log_linear_layer(
+            logdet,
+            w=params['nci'][i]['w'],
+            prev_sign=sign_in,
+            activation=options.nci_act,
+            clip=options.nci_clip,
+            tau=options.nci_tau,
+        )
+      return logdet, sign_in
+  else:
+    logdet_transform = None
+
+  output = network_blocks.logdet_matmul(orbitals, logdet_transform)
   if options.envelope.apply_type == envelopes.EnvelopeType.POST_DETERMINANT:
     output = output[0], output[1] + options.envelope.apply(
         ae=ae, r_ae=r_ae, r_ee=r_ee, **params['envelope'])
@@ -722,6 +754,12 @@ def make_fermi_net(
     hidden_dims: FermiLayers = ((256, 32), (256, 32), (256, 32)),
     determinants: int = 16,
     after_determinants: Union[int, Tuple[int, ...]] = 1,
+    activation: str = 'tanh',
+    use_nci: bool = False,
+    nci_dims: tuple = (256, 256),
+    nci_act: str = 'leaky_relu',
+    nci_clip: Optional[float] = None,
+    nci_tau: float = 1.,
 ) -> Tuple[InitFermiNet, FermiNetLike, FermiNetOptions]:
   """Creates functions for initializing parameters and evaluating ferminet.
 
@@ -766,9 +804,15 @@ def make_fermi_net(
       use_last_layer=use_last_layer,
       determinants=determinants,
       full_det=full_det,
+      activation=activation,
       bias_orbitals=bias_orbitals,
       envelope=envelope,
       feature_layer=feature_layer,
+      use_nci=use_nci,
+      nci_dims=nci_dims,
+      nci_act=nci_act,
+      nci_clip=nci_clip,
+      nci_tau=nci_tau,
   )
 
   init = functools.partial(

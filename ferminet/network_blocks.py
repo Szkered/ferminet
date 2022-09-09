@@ -11,16 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Neural network building blocks."""
 
 import functools
 import itertools
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence, Callable, Tuple
 
 import chex
 import jax
 import jax.numpy as jnp
+from tensorflow_probability.substrates import jax as tfp
 
 
 def array_partitions(sizes: Sequence[int]) -> Sequence[int]:
@@ -54,14 +54,29 @@ def init_linear_layer(key: chex.PRNGKey,
     unit (key 'b').
   """
   key1, key2 = jax.random.split(key)
-  weight = (
-      jax.random.normal(key1, shape=(in_dim, out_dim)) /
-      jnp.sqrt(float(in_dim)))
+  weight = (jax.random.normal(key1, shape=(in_dim, out_dim)) /
+            jnp.sqrt(float(in_dim)))
   if include_bias:
     bias = jax.random.normal(key2, shape=(out_dim,))
     return {'w': weight, 'b': bias}
   else:
     return {'w': weight}
+
+
+def init_nci(
+    key: chex.PRNGKey,
+    input_dim: int,
+    nci_dims: Sequence[int],
+) -> Sequence[Mapping[str, jnp.ndarray]]:
+  nci = []
+  for out_dim in nci_dims:
+    nci.append({})
+    key, subkey = jax.random.split(key, num=2)
+    nci[-1]['w'] = (jax.random.normal(subkey, shape=(input_dim, out_dim)) /
+                    jnp.sqrt(float(input_dim)))
+    # NOTE(@shizk): no bias to keep antisymmetry
+    input_dim = out_dim
+  return nci
 
 
 def linear_layer(x: jnp.ndarray,
@@ -79,6 +94,7 @@ def linear_layer(x: jnp.ndarray,
   """
   y = jnp.dot(x, w)
   return y + b if b is not None else y
+
 
 vmap_linear_layer = jax.vmap(linear_layer, in_axes=(0, None, None), out_axes=0)
 
@@ -103,8 +119,12 @@ def slogdet(x):
   return sign, logdet
 
 
-def logdet_matmul(xs: Sequence[jnp.ndarray],
-                  w: Optional[jnp.ndarray] = None) -> jnp.ndarray:
+def logdet_matmul(
+    xs: Sequence[jnp.ndarray],
+    logdet_transform: Optional[Callable] = None,
+    # params: ParamTree = None,
+    # options: FermiNetOptions = FermiNetOptions(),
+) -> jnp.ndarray:
   """Combines determinants and takes dot product with weights in log-domain.
 
   We use the log-sum-exp trick to reduce numerical instabilities.
@@ -134,13 +154,73 @@ def logdet_matmul(xs: Sequence[jnp.ndarray],
       lambda a, b: (a[0] * b[0], a[1] + b[1]),
       [slogdet(x) for x in xs if x.shape[-1] > 1], (1, 0))
 
+  if logdet_transform:
+    sign_in, logdet = logdet_transform(sign_in, logdet)
+    det1d = 1  # HACK(@shizk): do we need to care about this?
+
   # log-sum-exp trick
   maxlogdet = jnp.max(logdet)
   det = sign_in * det1d * jnp.exp(logdet - maxlogdet)
-  if w is None:
-    result = jnp.sum(det)
-  else:
-    result = jnp.matmul(det, w)[0]
+  result = jnp.sum(det)
+
   sign_out = jnp.sign(result)
   log_out = jnp.log(jnp.abs(result)) + maxlogdet
   return sign_out, log_out
+
+
+def log_linear_layer(
+    logx: jnp.ndarray,
+    w: jnp.ndarray,
+    prev_sign: Optional[jnp.ndarray] = None,
+    activation: str = 'leaky_relu',
+    clip: Optional[float] = None,
+    tau: float = 1.,
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+  """Evaluate act(x @ w) in log domain, i.e. compute with logx.
+
+  No bias to keep antisymmetry.
+
+  TODO(@shizk): conjecture: any activation function that is only zero
+  at origin works, as it does not alter the nodal structure
+
+  TODO(@shizk): why tanh doesn't work?
+
+  TODO(@shizk): kfac registration
+
+  Args:
+    logx: inputs in log domain [B, in_dim]
+    w: weights [in_dim, out_dim]
+    prev_sign: sign from the previous log linear layer [B, in_dim]
+    activation: activation function.
+    clip: if not None, activation becomes linear within the range [-clip, clip]
+    tau: temperature
+
+  Returns:
+    log(abs(act(x @ w))): [B, last_hdim]
+    sign(act(x @ w)): [B, last_hdim]
+  """
+  if prev_sign is None:
+    prev_sign = jnp.ones_like(logx)
+  vmap_over_hidden = jax.vmap(
+      lambda logx, w, prev_sign: tfp.math.reduce_weighted_logsumexp(
+          logx=logx, w=w * prev_sign, return_sign=True),
+      in_axes=(None, 1, None),
+      out_axes=0)
+  logy, sign = jax.vmap(vmap_over_hidden, in_axes=(0, None, 0),
+                        out_axes=0)(logx, w, prev_sign)
+  logy = logy / tau
+  if 'lecun_tanh' in activation:
+    alpha = float(activation.split('_')[-1])
+    act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
+  else:
+    act_fn = getattr(jax.nn, activation)
+  y = sign * jnp.exp(logy)
+  if clip is not None:  # linear when y is small
+    cond = y > clip
+    offset = clip - act_fn(clip)  # to make sure act is continuous
+    y_act = jnp.where(cond, act_fn(y) + sign * offset, y)
+  else:
+    y_act = act_fn(y)
+  sign = jnp.sign(y_act)
+  logy_act = jnp.log(sign * y_act)
+  return logy_act, sign

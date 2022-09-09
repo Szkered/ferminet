@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Default base configuration for molecular VMC calculations."""
 
 import enum
@@ -189,7 +188,15 @@ def default() -> ml_collections.ConfigDict:
           'make_feature_layer_kwargs': {},
           # Same structure as make_feature_layer
           'make_envelope_fn': '',
-          'make_envelope_kwargs': {}
+          'make_envelope_kwargs': {},
+          'activation': 'tanh',  # activation before the slater determinant
+          'nci': {  # neural CI
+              'enable': True,
+              'dims': (16, 16),
+              'act': 'leaky_relu',  # activation inside nci
+              'clip': 1e-8,
+              'tau': 1.,
+          },
       },
       'debug': {
           # Check optimizer state, parameters and loss and raise an exception if

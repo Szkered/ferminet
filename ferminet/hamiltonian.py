@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Evaluating the Hamiltonian on a wavefunction."""
 
 from typing import Any, Sequence
@@ -59,9 +58,8 @@ class MakeLocalEnergy(Protocol):
     """
 
 
-def local_kinetic_energy(
-    f: networks.LogFermiNetLike,
-    use_scan: bool = False) -> networks.LogFermiNetLike:
+def local_kinetic_energy(f: networks.LogFermiNetLike,
+                         use_scan: bool = False) -> networks.LogFermiNetLike:
   r"""Creates a function to for the local kinetic energy, -1/2 \nabla^2 ln|f|.
 
   Args:
@@ -81,13 +79,15 @@ def local_kinetic_energy(
     primal, dgrad_f = jax.linearize(grad_f_closure, data)
 
     if use_scan:
-      _, diagonal = lax.scan(
-          lambda i, _: (i + 1, dgrad_f(eye[i])[i]), 0, None, length=n)
+      _, diagonal = lax.scan(lambda i, _: (i + 1, dgrad_f(eye[i])[i]),
+                             0,
+                             None,
+                             length=n)
       result = -0.5 * jnp.sum(diagonal)
     else:
       result = -0.5 * lax.fori_loop(
           0, n, lambda i, val: val + dgrad_f(eye[i])[i], 0.0)
-    return result - 0.5 * jnp.sum(primal ** 2)
+    return result - 0.5 * jnp.sum(primal**2)
 
   return _lapl_over_f
 
@@ -124,8 +124,8 @@ def potential_nuclear_nuclear(charges: jnp.ndarray,
     atoms: Shape (natoms, ndim). Positions of the atoms.
   """
   r_aa = jnp.linalg.norm(atoms[None, ...] - atoms[:, None], axis=-1)
-  return jnp.sum(
-      jnp.triu((charges[None, ...] * charges[..., None]) / r_aa, k=1))
+  return jnp.sum(jnp.triu((charges[None, ...] * charges[..., None]) / r_aa,
+                          k=1))
 
 
 def potential_energy(r_ae: jnp.ndarray, r_ee: jnp.ndarray, atoms: jnp.ndarray,
@@ -181,8 +181,11 @@ def local_energy(f: networks.FermiNetLike,
     """
     del key  # unused
     _, _, r_ae, r_ee = networks.construct_input_features(data, atoms)
-    potential = potential_energy(r_ae, r_ee, atoms, charges)
+    # potential = potential_energy(r_ae, r_ee, atoms, charges)
+    v_ee = potential_electron_electron(r_ee)
+    v_ae = potential_electron_nuclear(charges, r_ae)
+    v_aa = potential_nuclear_nuclear(charges, atoms)
     kinetic = ke(params, data)
-    return potential + kinetic
+    return kinetic, v_ee, v_ae, v_aa
 
   return _e_l
