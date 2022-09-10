@@ -163,6 +163,7 @@ def logdet_matmul(
           activation=options.nci_act,
           clip=options.nci_clip,
           tau=options.nci_tau,
+          residual=options.nci_res,
       )
     det1d = 1  # HACK(@shizk): do we need to care about this?
 
@@ -183,6 +184,7 @@ def log_linear_layer(
     activation: str = 'tanh',
     clip: Optional[float] = None,
     tau: float = 1.,
+    residual: str = 'none',
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
   """Evaluate act(x @ w) in log domain, i.e. compute with logx.
 
@@ -216,13 +218,16 @@ def log_linear_layer(
       out_axes=0)
   logy, sign = vmap_over_hidden(logx, w, prev_sign)
   logy = logy / tau
+
   # residule in original domain
-  # logy, sign = jax.vmap(
-  #     lambda logx, logy, prev_sign, sign: tfp.math.reduce_weighted_logsumexp(
-  #         logx=[logx, logy], w=[prev_sign, sign], return_sign=True),
-  #     in_axes=(0, 0, 0, 0),
-  #     out_axes=0)(logx, logy, prev_sign, sign)
-  # return logy, sign
+  if residual == 'pre_act':
+    logy, sign = jax.vmap(
+        lambda logx, logy, prev_sign, sign: tfp.math.reduce_weighted_logsumexp(
+            logx=[logx, logy], w=[prev_sign, sign], return_sign=True),
+        in_axes=(0, 0, 0, 0),
+        out_axes=0)(logx, logy, prev_sign, sign)
+
+  # activation in original domain
   y = sign * jnp.exp(logy)
   # activation in original domain
   if 'lecun_tanh' in activation:
@@ -238,4 +243,12 @@ def log_linear_layer(
     y_act = act_fn(y)
   sign = jnp.sign(y_act)
   logy_act = jnp.log(sign * y_act)
+
+  if residual == 'post_act':
+    logy_act, sign = jax.vmap(
+        lambda logx, logy, prev_sign, sign: tfp.math.reduce_weighted_logsumexp(
+            logx=[logx, logy], w=[prev_sign, sign], return_sign=True),
+        in_axes=(0, 0, 0, 0),
+        out_axes=0)(logx, logy_act, prev_sign, sign)
+
   return logy_act, sign

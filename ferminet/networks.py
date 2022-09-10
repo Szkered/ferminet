@@ -171,6 +171,7 @@ class FermiNetOptions:
   nci_act: str = 'leaky_relu'
   nci_clip: Optional[float] = None
   nci_tau: float = 1.0
+  nci_res: str = 'none'
 
 
 ## Network initialisation ##
@@ -743,6 +744,7 @@ def make_fermi_net(
     nci_act: str = 'leaky_relu',
     nci_clip: Optional[float] = None,
     nci_tau: float = 1.,
+    nci_res: str = 'none',
 ) -> Tuple[InitFermiNet, FermiNetLike, FermiNetOptions]:
   """Creates functions for initializing parameters and evaluating ferminet.
 
@@ -796,6 +798,7 @@ def make_fermi_net(
       nci_act=nci_act,
       nci_clip=nci_clip,
       nci_tau=nci_tau,
+      nci_res=nci_res,
   )
 
   init = functools.partial(

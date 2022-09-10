@@ -460,6 +460,7 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
       nci_act=cfg.network.nci.act,
       nci_clip=cfg.network.nci.clip,
       nci_tau=cfg.network.nci.tau,
+      nci_res=cfg.network.nci.residual,
       **cfg.network.detnet)
   key, subkey = jax.random.split(key)
   params = network_init(subkey)
