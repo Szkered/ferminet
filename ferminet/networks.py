@@ -716,24 +716,7 @@ def fermi_net(
       nspins=nspins,
       options=options,
   )
-
-  if options.use_nci:  # neural CI in log domain
-
-    def logdet_transform(sign_in, logdet):
-      for i in range(len(params['nci'])):
-        logdet, sign_in = network_blocks.log_linear_layer(
-            logdet,
-            w=params['nci'][i]['w'],
-            prev_sign=sign_in,
-            activation=options.nci_act,
-            clip=options.nci_clip,
-            tau=options.nci_tau,
-        )
-      return logdet, sign_in
-  else:
-    logdet_transform = None
-
-  output = network_blocks.logdet_matmul(orbitals, logdet_transform)
+  output = network_blocks.logdet_matmul(orbitals, params, options)
   if options.envelope.apply_type == envelopes.EnvelopeType.POST_DETERMINANT:
     output = output[0], output[1] + options.envelope.apply(
         ae=ae, r_ae=r_ae, r_ee=r_ee, **params['envelope'])

@@ -192,9 +192,9 @@ def default() -> ml_collections.ConfigDict:
           'activation': 'tanh',  # activation before the slater determinant
           'nci': {  # neural CI
               'enable': True,
-              'dims': (16, 16),
+              'dims': (256, 16),
               'act': 'leaky_relu',  # activation inside nci
-              'clip': 1e-8,
+              'clip': None,
               'tau': 1.,
           },
       },

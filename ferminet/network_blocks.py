@@ -15,7 +15,7 @@
 
 import functools
 import itertools
-from typing import Mapping, Optional, Sequence, Callable, Tuple
+from typing import Any, Mapping, Optional, Sequence, Tuple
 
 import chex
 import jax
@@ -121,9 +121,8 @@ def slogdet(x):
 
 def logdet_matmul(
     xs: Sequence[jnp.ndarray],
-    logdet_transform: Optional[Callable] = None,
-    # params: ParamTree = None,
-    # options: FermiNetOptions = FermiNetOptions(),
+    params: Any = None,
+    options: Any = None,
 ) -> jnp.ndarray:
   """Combines determinants and takes dot product with weights in log-domain.
 
@@ -148,14 +147,23 @@ def logdet_matmul(
   # 1x1.
   det1d = functools.reduce(lambda a, b: a * b,
                            [x.reshape(-1) for x in xs if x.shape[-1] == 1], 1)
+
   # Pass initial value to functools so sign_in = 1, logdet = 0 if all matrices
   # are 1x1.
   sign_in, logdet = functools.reduce(
       lambda a, b: (a[0] * b[0], a[1] + b[1]),
       [slogdet(x) for x in xs if x.shape[-1] > 1], (1, 0))
 
-  if logdet_transform:
-    sign_in, logdet = logdet_transform(sign_in, logdet)
+  if options.use_nci:  # neural CI in log domain
+    for i in range(len(params['nci'])):
+      logdet, sign_in = log_linear_layer(
+          logdet,
+          w=params['nci'][i]['w'],
+          prev_sign=sign_in,
+          activation=options.nci_act,
+          clip=options.nci_clip,
+          tau=options.nci_tau,
+      )
     det1d = 1  # HACK(@shizk): do we need to care about this?
 
   # log-sum-exp trick
@@ -172,7 +180,7 @@ def log_linear_layer(
     logx: jnp.ndarray,
     w: jnp.ndarray,
     prev_sign: Optional[jnp.ndarray] = None,
-    activation: str = 'leaky_relu',
+    activation: str = 'tanh',
     clip: Optional[float] = None,
     tau: float = 1.,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -206,15 +214,22 @@ def log_linear_layer(
           logx=logx, w=w * prev_sign, return_sign=True),
       in_axes=(None, 1, None),
       out_axes=0)
-  logy, sign = jax.vmap(vmap_over_hidden, in_axes=(0, None, 0),
-                        out_axes=0)(logx, w, prev_sign)
+  logy, sign = vmap_over_hidden(logx, w, prev_sign)
   logy = logy / tau
+  # residule in original domain
+  # logy, sign = jax.vmap(
+  #     lambda logx, logy, prev_sign, sign: tfp.math.reduce_weighted_logsumexp(
+  #         logx=[logx, logy], w=[prev_sign, sign], return_sign=True),
+  #     in_axes=(0, 0, 0, 0),
+  #     out_axes=0)(logx, logy, prev_sign, sign)
+  # return logy, sign
+  y = sign * jnp.exp(logy)
+  # activation in original domain
   if 'lecun_tanh' in activation:
     alpha = float(activation.split('_')[-1])
     act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
   else:
     act_fn = getattr(jax.nn, activation)
-  y = sign * jnp.exp(logy)
   if clip is not None:  # linear when y is small
     cond = y > clip
     offset = clip - act_fn(clip)  # to make sure act is continuous
