@@ -164,6 +164,7 @@ def logdet_matmul(
           clip=options.nci_clip,
           tau=options.nci_tau,
           residual=options.nci_res,
+          softmax_w=options.nci_softmax_w,
       )
     det1d = 1  # HACK(@shizk): do we need to care about this?
 
@@ -185,6 +186,7 @@ def log_linear_layer(
     clip: Optional[float] = None,
     tau: float = 1.,
     residual: str = 'none',
+    softmax_w: bool = False,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
   """Evaluate act(x @ w) in log domain, i.e. compute with logx.
 
@@ -213,18 +215,19 @@ def log_linear_layer(
     prev_sign = jnp.ones_like(logx)
   vmap_over_hidden = jax.vmap(
       lambda logx, w, prev_sign: tfp.math.reduce_weighted_logsumexp(
-          logx=logx, w=w * prev_sign, return_sign=True),
+          logx=logx,
+          w=(jax.nn.softmax(w) if softmax_w else w) * prev_sign,
+          return_sign=True),
       in_axes=(None, 1, None),
       out_axes=0)
   logy, sign = vmap_over_hidden(logx, w, prev_sign)
   logy = logy / tau
 
   # residule in original domain
-  if residual == 'pre_act':
+  if residual == 'pre_act' and logx.shape == logy.shape:
     logy, sign = jax.vmap(
         lambda logx, logy, prev_sign, sign: tfp.math.reduce_weighted_logsumexp(
-            logx=[logx, logy], w=[prev_sign, sign], return_sign=True)
-        if logx.shape == logy.shape else logy,
+            logx=[logx, logy], w=[prev_sign, sign], return_sign=True),
         in_axes=(0, 0, 0, 0),
         out_axes=0)(logx, logy, prev_sign, sign)
 
@@ -246,11 +249,10 @@ def log_linear_layer(
   logy_act = jnp.log(sign * y_act)
 
   # residule in original domain
-  if residual == 'post_act':
+  if residual == 'post_act' and logx.shape == logy_act.shape:
     logy_act, sign = jax.vmap(
         lambda logx, logy, prev_sign, sign: tfp.math.reduce_weighted_logsumexp(
-            logx=[logx, logy], w=[prev_sign, sign], return_sign=True)
-        if logx.shape == logy.shape else logy,
+            logx=[logx, logy], w=[prev_sign, sign], return_sign=True),
         in_axes=(0, 0, 0, 0),
         out_axes=0)(logx, logy_act, prev_sign, sign)
 

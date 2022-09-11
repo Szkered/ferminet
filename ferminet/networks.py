@@ -16,6 +16,7 @@ import enum
 import functools
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple, Union
 
+import ml_collections
 import attr
 import chex
 from ferminet import envelopes
@@ -157,6 +158,7 @@ class FermiNetOptions:
   """
   ndim: int = 3
   hidden_dims: FermiLayers = ((256, 32), (256, 32), (256, 32), (256, 32))
+  after_determinants: Sequence[int] = (1,)
   use_last_layer: bool = False
   determinants: int = 16
   full_det: bool = True
@@ -172,6 +174,7 @@ class FermiNetOptions:
   nci_clip: Optional[float] = None
   nci_tau: float = 1.0
   nci_res: str = 'none'
+  nci_softmax_w: bool = True
 
 
 ## Network initialisation ##
@@ -731,20 +734,8 @@ def make_fermi_net(
     *,
     envelope: Optional[envelopes.Envelope] = None,
     feature_layer: Optional[FeatureLayer] = None,
-    bias_orbitals: bool = False,
-    use_last_layer: bool = False,
     hf_solution: Optional[scf.Scf] = None,
-    full_det: bool = True,
-    hidden_dims: FermiLayers = ((256, 32), (256, 32), (256, 32)),
-    determinants: int = 16,
-    after_determinants: Union[int, Tuple[int, ...]] = 1,
-    activation: str = 'tanh',
-    use_nci: bool = False,
-    nci_dims: tuple = (256, 256),
-    nci_act: str = 'leaky_relu',
-    nci_clip: Optional[float] = None,
-    nci_tau: float = 1.,
-    nci_res: str = 'none',
+    cfg: ml_collections.ConfigDict = None,
 ) -> Tuple[InitFermiNet, FermiNetLike, FermiNetOptions]:
   """Creates functions for initializing parameters and evaluating ferminet.
 
@@ -776,7 +767,6 @@ def make_fermi_net(
     initialise the network parameters and apply the network respectively, and
     options specifies the settings used in the network.
   """
-  del after_determinants
 
   if not envelope:
     envelope = envelopes.make_isotropic_envelope()
@@ -785,20 +775,20 @@ def make_fermi_net(
     feature_layer = make_ferminet_features(charges, nspins)
 
   options = FermiNetOptions(
-      hidden_dims=hidden_dims,
-      use_last_layer=use_last_layer,
-      determinants=determinants,
-      full_det=full_det,
-      activation=activation,
-      bias_orbitals=bias_orbitals,
       envelope=envelope,
       feature_layer=feature_layer,
-      use_nci=use_nci,
-      nci_dims=nci_dims,
-      nci_act=nci_act,
-      nci_clip=nci_clip,
-      nci_tau=nci_tau,
-      nci_res=nci_res,
+      bias_orbitals=cfg.network.bias_orbitals,
+      use_last_layer=cfg.network.use_last_layer,
+      full_det=cfg.network.full_det,
+      activation=cfg.network.activation,
+      use_nci=cfg.network.nci.enable,
+      nci_dims=cfg.network.nci.dims,
+      nci_act=cfg.network.nci.act,
+      nci_clip=cfg.network.nci.clip,
+      nci_tau=cfg.network.nci.tau,
+      nci_res=cfg.network.nci.residual,
+      nci_softmax_w=cfg.network.nci.softmax_w,
+      **cfg.network.detnet,
   )
 
   init = functools.partial(

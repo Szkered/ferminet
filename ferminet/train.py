@@ -450,18 +450,9 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
       charges,
       envelope=envelope,
       feature_layer=feature_layer,
-      bias_orbitals=cfg.network.bias_orbitals,
-      use_last_layer=cfg.network.use_last_layer,
       hf_solution=hf_solution,
-      full_det=cfg.network.full_det,
-      activation=cfg.network.activation,
-      use_nci=cfg.network.nci.enable,
-      nci_dims=cfg.network.nci.dims,
-      nci_act=cfg.network.nci.act,
-      nci_clip=cfg.network.nci.clip,
-      nci_tau=cfg.network.nci.tau,
-      nci_res=cfg.network.nci.residual,
-      **cfg.network.detnet)
+      cfg=cfg,
+  )
   key, subkey = jax.random.split(key)
   params = network_init(subkey)
   params = kfac_jax.utils.replicate_all_local_devices(params)

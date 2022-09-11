@@ -198,6 +198,7 @@ def default() -> ml_collections.ConfigDict:
               'clip': None,
               'tau': 1.,
               'residual': 'post_act',
+              'softmax_w': True,
           },
       },
       'debug': {
