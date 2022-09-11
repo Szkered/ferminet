@@ -223,7 +223,8 @@ def log_linear_layer(
   if residual == 'pre_act':
     logy, sign = jax.vmap(
         lambda logx, logy, prev_sign, sign: tfp.math.reduce_weighted_logsumexp(
-            logx=[logx, logy], w=[prev_sign, sign], return_sign=True),
+            logx=[logx, logy], w=[prev_sign, sign], return_sign=True)
+        if logx.shape == logy.shape else logy,
         in_axes=(0, 0, 0, 0),
         out_axes=0)(logx, logy, prev_sign, sign)
 
@@ -244,10 +245,12 @@ def log_linear_layer(
   sign = jnp.sign(y_act)
   logy_act = jnp.log(sign * y_act)
 
+  # residule in original domain
   if residual == 'post_act':
     logy_act, sign = jax.vmap(
         lambda logx, logy, prev_sign, sign: tfp.math.reduce_weighted_logsumexp(
-            logx=[logx, logy], w=[prev_sign, sign], return_sign=True),
+            logx=[logx, logy], w=[prev_sign, sign], return_sign=True)
+        if logx.shape == logy.shape else logy,
         in_axes=(0, 0, 0, 0),
         out_axes=0)(logx, logy_act, prev_sign, sign)
 
