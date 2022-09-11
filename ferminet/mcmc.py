@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Metropolis-Hastings Monte Carlo.
 
 NOTE: these functions operate on batches of MCMC configurations and should not
@@ -43,7 +42,7 @@ def _harmonic_mean(x, atoms):
   return 1.0 / jnp.mean(1.0 / r_ae, axis=-2, keepdims=True)
 
 
-def _log_prob_gaussian(x, mu, sigma):
+def _log_prob_gaussian(x, mu, sigma, axis=[1, 2, 3]):
   """Calculates the log probability of Gaussian with diagonal covariance.
 
   Args:
@@ -56,9 +55,98 @@ def _log_prob_gaussian(x, mu, sigma):
     Log probability of Gaussian distribution with shape as required for
     mh_update - (batch, nelectron, 1, 1).
   """
-  numer = jnp.sum(-0.5 * ((x - mu)**2) / (sigma**2), axis=[1, 2, 3])
-  denom = x.shape[-1] * jnp.sum(jnp.log(sigma), axis=[1, 2, 3])
+  numer = jnp.sum(-0.5 * ((x - mu)**2) / (sigma**2), axis=axis)
+  denom = x.shape[-1] * jnp.sum(jnp.log(sigma), axis=axis)
   return numer - denom
+
+
+def mh_update_sgld(params,
+                   f,
+                   x1,
+                   key,
+                   lp_1,
+                   delta_lp_1,
+                   num_accepts,
+                   stddev=0.01,
+                   atoms=None,
+                   i=0):
+  """Performs one Metropolis-Hastings step using SGLD.
+
+  Args:
+    params: Wavefuncttion parameters.
+    f: Callable with signature f(params, x) which returns the log of the
+      wavefunction (i.e. the sqaure root of the log probability of x).
+    x1: Initial MCMC configurations. Shape (batch, nelectrons*ndim).
+    key: RNG state.
+    lp_1: log probability of f evaluated at x1 given parameters params.
+    delta_lp_1: gradient of log probability of f evaluated at x1
+    num_accepts: Number of MH move proposals accepted.
+    epsilon: SGLD noise scale
+    i: Ignored.
+
+  TODO(@shizk): what to do with atoms?
+
+  Returns:
+    (x, key, lp, delta_lp, num_accepts), where:
+      x: Updated MCMC configurations.
+      key: RNG state.
+      lp: log probability of f evaluated at x.
+      delta_lp: graident of log probability of f evaluated at x.
+      num_accepts: update running total of number of accepted MH moves.
+  """
+  key, subkey = jax.random.split(key)
+  f_sum = lambda params, y: jnp.sum(f(params, y), axis=0)
+  grad_f = jax.grad(f_sum, argnums=1)
+
+  if atoms is None:  # symmetric proposal, same stddev everywhere
+    epsilon = stddev**2
+    x2 = x1 + 0.5 * epsilon * delta_lp_1 + (epsilon**0.5) * jax.random.normal(
+        subkey, shape=x1.shape)
+    lp_2 = 2. * f(params, x2)
+    delta_lp_2 = 2. * grad_f(params, x2)
+    delta_lp_2 = jnp.nan_to_num(delta_lp_2)
+
+    qx2_x1 = -jnp.sum(jnp.square(x2 - x1 - 0.5 * epsilon * delta_lp_1),
+                      axis=-1) / (2 * epsilon)
+    qx1_x2 = -jnp.sum(jnp.square(x1 - x2 - 0.5 * epsilon * delta_lp_2),
+                      axis=-1) / (2 * epsilon)
+    ratio = lp_2 - lp_1 + qx1_x2 - qx2_x1
+
+  else:  # asymmetric proposal, stddev propto harmonic mean of nuclear distances
+    n = x1.shape[0]
+    x1 = jnp.reshape(x1, [n, -1, 1, 3])
+    hmean1 = _harmonic_mean(x1, atoms)  # harmonic mean of distances to nuclei
+    epsilon1 = hmean1 * stddev**2
+
+    x2 = x1 + 0.5 * epsilon1 * delta_lp_1 + (epsilon1**0.5) * jax.random.normal(
+        subkey, shape=x1.shape)
+    lp_2 = 2. * f(params, x2)  # log prob of proposal
+    delta_lp_2 = 2. * grad_f(params, x2)
+    delta_lp_2 = jnp.nan_to_num(delta_lp_2)
+
+    hmean2 = _harmonic_mean(x2, atoms)  # needed for probability of reverse jump
+    epsilon2 = hmean2 * stddev**2
+
+    lq_x2_x1 = _log_prob_gaussian(x2,
+                                  x1 + 0.5 * epsilon1 * delta_lp_1,
+                                  stddev * hmean1,
+                                  axis=-1)
+    lq_x1_x2 = _log_prob_gaussian(x1,
+                                  x2 + 0.5 * epsilon2 * delta_lp_2,
+                                  stddev * hmean2,
+                                  axis=1)
+
+    ratio = lp_2 + lq_x2_x1 - lp_1 - lq_x1_x2
+
+  key, subkey = jax.random.split(key)
+  rnd = jnp.log(jax.random.uniform(subkey, shape=lp_1.shape))
+  cond = ratio > rnd
+  x_new = jnp.where(cond[..., None], x2, x1)
+  lp_new = jnp.where(cond, lp_2, lp_1)
+  delta_lp_new = jnp.where(cond[..., None], delta_lp_2, delta_lp_1)
+  num_accepts += jnp.sum(cond)
+
+  return x_new, key, lp_new, delta_lp_new, num_accepts
 
 
 def mh_update(params,
@@ -186,11 +274,14 @@ def mh_one_electron_update(params,
   return x_new, key, lp_new, num_accepts
 
 
-def make_mcmc_step(batch_network,
-                   batch_per_device,
-                   steps=10,
-                   atoms=None,
-                   one_electron_moves=False):
+def make_mcmc_step(
+    batch_network,
+    batch_per_device,
+    steps=10,
+    atoms=None,
+    one_electron_moves=False,
+    use_sgld=False,
+):
   """Creates the MCMC step function.
 
   Args:
@@ -209,7 +300,12 @@ def make_mcmc_step(batch_network,
   Returns:
     Callable which performs the set of MCMC steps.
   """
-  inner_fun = mh_one_electron_update if one_electron_moves else mh_update
+  if use_sgld:
+    inner_fun = mh_update_sgld
+  elif one_electron_moves:
+    inner_fun = mh_one_electron_update
+  else:
+    inner_fun = mh_update
 
   @jax.jit
   def mcmc_step(params, data, key, width):
@@ -227,14 +323,29 @@ def make_mcmc_step(batch_network,
     """
 
     def step_fn(i, x):
-      return inner_fun(
-          params, batch_network, *x, stddev=width, atoms=atoms, i=i)
+      return inner_fun(params,
+                       batch_network,
+                       *x,
+                       stddev=width,
+                       atoms=atoms,
+                       i=i)
 
     nelec = data.shape[-1] // 3
     nsteps = nelec * steps if one_electron_moves else steps
     logprob = 2. * batch_network(params, data)
-    data, key, _, num_accepts = lax.fori_loop(0, nsteps, step_fn,
-                                              (data, key, logprob, 0.))
+
+    if use_sgld:
+      batch_network_sum = lambda params, y: jnp.sum(batch_network(params, y),
+                                                    axis=0)
+      grad_f_batch = jax.grad(batch_network_sum, argnums=1)
+      delta_logprob = 2. * grad_f_batch(params, data)
+      delta_logprob = jnp.nan_to_num(delta_logprob)
+      init_data = (data, key, logprob, delta_logprob, 0.)
+      data, key, _, _, num_accepts = lax.fori_loop(0, nsteps, step_fn,
+                                                   init_data)
+    else:
+      init_data = (data, key, logprob, 0.)
+      data, key, _, num_accepts = lax.fori_loop(0, nsteps, step_fn, init_data)
     pmove = jnp.sum(num_accepts) / (nsteps * batch_per_device)
     pmove = constants.pmean(pmove)
     return data, pmove

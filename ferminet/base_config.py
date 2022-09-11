@@ -145,8 +145,8 @@ def default() -> ml_collections.ConfigDict:
           # Width of (atom-centred) Gaussian used to generate initial electron
           # configurations.
           'init_width': 1.0,
-          # Width of Gaussian used for random moves for RMW or step size for
-          # HMC.
+          # Width of Gaussian used for random moves for RMW; step size for
+          # HMC; epsilon for sgld
           'move_width': 0.02,
           # Number of steps after which to update the adaptive MCMC step size
           'adapt_frequency': 100,
@@ -163,6 +163,7 @@ def default() -> ml_collections.ConfigDict:
           # mean of the distance to the nuclei.
           'scale_by_nuclear_distance': False,
           'one_electron': False,  # If true, use one-electron moves
+          'use_sgld': True,  # If true, use mh with sgld
       },
       'network': {
           'detnet': {

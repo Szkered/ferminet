@@ -547,6 +547,7 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
       steps=cfg.mcmc.steps,
       atoms=atoms_to_mcmc,
       one_electron_moves=cfg.mcmc.one_electron,
+      use_sgld=cfg.mcmc.use_sgld,
   )
   # Construct loss and optimizer
   if cfg.system.make_local_energy_fn:
