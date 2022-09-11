@@ -42,7 +42,10 @@ def main(_):
         raw_cfg.system.molecule_name = system_name
       cfg = base_config.resolve(deepcopy(raw_cfg))
       logging.info("System config:\n\n%s", cfg)
-      train.train(cfg)
+      try:
+        train.train(cfg)
+      except Exception:
+        logging.exception("train failed")
   else:
     cfg = base_config.resolve(raw_cfg)
     logging.info("System config:\n\n%s", cfg)
