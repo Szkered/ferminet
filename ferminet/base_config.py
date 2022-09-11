@@ -163,7 +163,7 @@ def default() -> ml_collections.ConfigDict:
           # mean of the distance to the nuclei.
           'scale_by_nuclear_distance': False,
           'one_electron': False,  # If true, use one-electron moves
-          'use_sgld': True,  # If true, use mh with sgld
+          'use_sgld': False,  # If true, use mh with sgld
       },
       'network': {
           'detnet': {
