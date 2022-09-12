@@ -233,6 +233,7 @@ def log_linear_layer(
 
   # activation in original domain
   y = sign * jnp.exp(logy)
+  y = jnp.nan_to_num(y)
   # activation in original domain
   if 'lecun_tanh' in activation:
     alpha = float(activation.split('_')[-1])
@@ -247,6 +248,7 @@ def log_linear_layer(
     y_act = act_fn(y)
   sign = jnp.sign(y_act)
   logy_act = jnp.log(sign * y_act)
+  logy_act = jnp.nan_to_num(logy_act)
 
   # residule in original domain
   if residual == 'post_act' and logx.shape == logy_act.shape:

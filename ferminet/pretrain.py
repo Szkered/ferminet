@@ -11,12 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Utilities for pretraining and importing PySCF models."""
 
 from typing import Callable, Optional, Sequence, Tuple, Union
 
-from absl import logging
+from absl import logging, flags
 import chex
 from ferminet import constants
 from ferminet import envelopes
@@ -30,7 +29,9 @@ import kfac_jax
 import numpy as np
 import optax
 import pyscf
+import wandb
 
+FLAGS = flags.FLAGS
 
 # Given the parameters and electron positions, return arrays(s) of the orbitals.
 # See networks.fermi_net_orbitals. (Note only the orbitals, and not envelope
@@ -58,8 +59,10 @@ def get_hf(molecule: Optional[Sequence[system.Atom]] = None,
   if pyscf_mol:
     scf_approx = scf.Scf(pyscf_mol=pyscf_mol, restricted=restricted)
   else:
-    scf_approx = scf.Scf(
-        molecule, nelectrons=nspins, basis=basis, restricted=restricted)
+    scf_approx = scf.Scf(molecule,
+                         nelectrons=nspins,
+                         basis=basis,
+                         restricted=restricted)
   scf_approx.run()
   return scf_approx
 
@@ -238,7 +241,11 @@ def pretrain_hartree_fock(
     def envelope_fn(params, x):
       ae, r_ae, _, r_ee = networks.construct_input_features(x, atoms)
       return network_options.envelope.apply(
-          ae=ae, r_ae=r_ae, r_ee=r_ee, **params)
+          ae=ae,
+          r_ae=r_ae,
+          r_ee=r_ee,
+          **params,
+      )
   else:
     envelope_fn = lambda p, x: 0.0
   batch_envelope_fn = jax.vmap(envelope_fn, (None, 0))
@@ -248,7 +255,8 @@ def pretrain_hartree_fock(
       batch_orbitals,
       batch_network,
       optimizer.update,
-      full_det=network_options.full_det)
+      full_det=network_options.full_det,
+  )
   pretrain_step = constants.pmap(pretrain_step)
   pnetwork = constants.pmap(batch_network)
   logprob = 2. * pnetwork(params, data)
@@ -261,4 +269,6 @@ def pretrain_hartree_fock(
     logging.info('Pretrain iter %05d: %g', t, loss[0])
     if logger:
       logger(t, loss[0])
+    if FLAGS.use_wandb:
+      wandb.log(data={'pretrain_loss': loss[0]}, step=t)
   return params, data
