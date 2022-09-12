@@ -223,7 +223,6 @@ def log_linear_layer(
       in_axes=(None, 1, None),
       out_axes=0)
   logy, sign = vmap_over_hidden(logx, w, prev_sign)
-  logy = logy / tau
 
   # residule in original domain
   if residual == 'pre_act' and logx.shape == logy.shape:
@@ -235,6 +234,7 @@ def log_linear_layer(
 
   # activation in original domain
   y = sign * jnp.exp(logy)
+  y = y / tau
   y = jnp.nan_to_num(y)
   # activation in original domain
   if 'lecun_tanh' in activation:
