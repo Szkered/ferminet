@@ -20,6 +20,7 @@ from ferminet import base_config
 from ferminet import train
 from ml_collections.config_flags import config_flags
 from copy import deepcopy
+import wandb
 
 # internal imports
 
