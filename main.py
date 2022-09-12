@@ -29,6 +29,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("exp_name", "ferminet", "sota experiment name")
 flags.DEFINE_bool("use_wandb", False, "if true, use wandb")
 flags.DEFINE_bool("run_all", False, "if true, run all system")
+flags.DEFINE_bool("log_debug_stats", False, "if true, log extra stats")
 config_flags.DEFINE_config_file('config', None, 'Path to config file.')
 
 

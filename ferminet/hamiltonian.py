@@ -15,12 +15,15 @@
 
 from typing import Any, Sequence
 
+from absl import flags
 import chex
 from ferminet import networks
 import jax
 from jax import lax
 import jax.numpy as jnp
 from typing_extensions import Protocol
+
+FLAGS = flags.FLAGS
 
 
 class LocalEnergy(Protocol):
@@ -168,6 +171,7 @@ def local_energy(f: networks.FermiNetLike,
   """
   del nspins
   log_abs_f = lambda *args, **kwargs: f(*args, **kwargs)[1]
+  f_stats = lambda *args, **kwargs: f(*args, **kwargs)[2]
   ke = local_kinetic_energy(log_abs_f, use_scan=use_scan)
 
   def _e_l(params: networks.ParamTree, key: chex.PRNGKey,
@@ -186,6 +190,10 @@ def local_energy(f: networks.FermiNetLike,
     v_ae = potential_electron_nuclear(charges, r_ae)
     v_aa = potential_nuclear_nuclear(charges, atoms)
     kinetic = ke(params, data)
-    return kinetic, v_ee, v_ae, v_aa
+    if FLAGS.log_debug_stats:
+      stats = f_stats(params, data)
+    else:
+      stats = {}
+    return kinetic, v_ee, v_ae, v_aa, stats
 
   return _e_l

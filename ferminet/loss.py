@@ -13,7 +13,7 @@
 # limitations under the License.
 """Helper functions to create the loss and custom gradient of the loss."""
 
-from typing import Tuple
+from typing import Tuple, Dict
 
 import chex
 from ferminet import constants
@@ -39,6 +39,7 @@ class AuxiliaryLossData:
   v_ee: jnp.DeviceArray
   v_ae: jnp.DeviceArray
   v_aa: jnp.DeviceArray
+  stats: Dict[str, jnp.DeviceArray]
 
 
 class LossFn(Protocol):
@@ -116,7 +117,7 @@ def make_loss(network: networks.LogFermiNetLike,
       over the batch and over all devices inside a pmap.
     """
     keys = jax.random.split(key, num=data.shape[0])
-    k, v_ee, v_ae, v_aa = batch_local_energy(params, keys, data)
+    k, v_ee, v_ae, v_aa, stats = batch_local_energy(params, keys, data)
     e_l = k + v_ee + v_ae + v_aa
     loss = constants.pmean(jnp.mean(e_l))
     variance = constants.pmean(jnp.mean((e_l - loss)**2))
@@ -127,6 +128,7 @@ def make_loss(network: networks.LogFermiNetLike,
         v_ee=v_ee,
         v_ae=v_ae,
         v_aa=v_aa,
+        stats=stats,
     )
 
   @total_energy.defjvp

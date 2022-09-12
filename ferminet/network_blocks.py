@@ -154,18 +154,20 @@ def logdet_matmul(
       lambda a, b: (a[0] * b[0], a[1] + b[1]),
       [slogdet(x) for x in xs if x.shape[-1] > 1], (1, 0))
 
+  debug_stats = {}
   if options.use_nci:  # neural CI in log domain
     for i in range(len(params['nci'])):
-      logdet, sign_in = log_linear_layer(
-          logdet,
-          w=params['nci'][i]['w'],
-          prev_sign=sign_in,
-          activation=options.nci_act,
-          clip=options.nci_clip,
-          tau=options.nci_tau,
-          residual=options.nci_res,
-          softmax_w=options.nci_softmax_w,
-      )
+      logdet, sign_in, debug_stats[f"pre_act_{i}"], debug_stats[
+          f"act_{i}"] = log_linear_layer(
+              logdet,
+              w=params['nci'][i]['w'],
+              prev_sign=sign_in,
+              activation=options.nci_act,
+              clip=options.nci_clip,
+              tau=options.nci_tau,
+              residual=options.nci_res,
+              softmax_w=options.nci_softmax_w,
+          )
     det1d = 1  # HACK(@shizk): do we need to care about this?
 
   # log-sum-exp trick
@@ -175,7 +177,7 @@ def logdet_matmul(
 
   sign_out = jnp.sign(result)
   log_out = jnp.log(jnp.abs(result)) + maxlogdet
-  return sign_out, log_out
+  return sign_out, log_out, debug_stats
 
 
 def log_linear_layer(
@@ -258,4 +260,4 @@ def log_linear_layer(
         in_axes=(0, 0, 0, 0),
         out_axes=0)(logx, logy_act, prev_sign, sign)
 
-  return logy_act, sign
+  return logy_act, sign, jnp.mean(y), jnp.mean(y_act)

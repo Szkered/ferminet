@@ -707,6 +707,8 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
         info = dict(
             jax.tree_map(lambda x: float(jnp.nan_to_num(jnp.mean(x))),
                          aux_data))
+        info = {**info, **info['stats']}
+        del info['stats']
         info["weighted_var"] = weighted_stats.variance
         info["pmove"] = pmove
         if system_name in exact_energy[system_type].keys():
