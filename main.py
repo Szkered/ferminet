@@ -46,6 +46,8 @@ def main(_):
         train.train(cfg)
       except Exception:
         logging.exception("train failed")
+        if FLAGS.use_wandb:
+          wandb.finish()
   else:
     cfg = base_config.resolve(raw_cfg)
     logging.info("System config:\n\n%s", cfg)
