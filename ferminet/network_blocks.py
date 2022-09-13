@@ -154,7 +154,8 @@ def logdet_matmul(
       lambda a, b: (a[0] * b[0], a[1] + b[1]),
       [slogdet(x) for x in xs if x.shape[-1] > 1], (1, 0))
 
-  debug_stats = {}
+  debug_stats = {'logdet_abs': jnp.mean(logdet)}
+  # logdet = logdet_in.copy()
   if options.use_nci:  # neural CI in log domain
     for i in range(len(params['nci'])):
       logdet, sign_in, debug_stats[f"pre_act_{i}"], debug_stats[

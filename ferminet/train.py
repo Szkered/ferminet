@@ -563,7 +563,10 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
                                             nspins=nspins,
                                             use_scan=False)
   evaluate_loss = qmc_loss_functions.make_loss(
-      network, local_energy, clip_local_energy=cfg.optim.clip_el)
+      signed_network,
+      local_energy,
+      clip_local_energy=cfg.optim.clip_el,
+      logdet_reg_lambda=cfg.optim.logdet_reg_lambda)
 
   # Compute the learning rate
   def learning_rate_schedule(t_: jnp.ndarray) -> jnp.ndarray:

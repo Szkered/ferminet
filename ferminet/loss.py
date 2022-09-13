@@ -23,6 +23,7 @@ import jax
 import jax.numpy as jnp
 import kfac_jax
 from typing_extensions import Protocol
+from jax.tree_util import tree_flatten
 
 
 @chex.dataclass
@@ -69,9 +70,14 @@ class LossFn(Protocol):
     """
 
 
-def make_loss(network: networks.LogFermiNetLike,
-              local_energy: hamiltonian.LocalEnergy,
-              clip_local_energy: float = 0.0) -> LossFn:
+def make_loss(
+    # network: networks.LogFermiNetLike,
+    signed_network: networks.FermiNetLike,
+    local_energy: hamiltonian.LocalEnergy,
+    clip_local_energy: float = 0.0,
+    grad_norm_reg: float = 0.0,
+    logdet_reg_lambda: float = 0.0,
+) -> LossFn:
   """Creates the loss function, including custom gradients.
 
   Args:
@@ -90,8 +96,21 @@ def make_loss(network: networks.LogFermiNetLike,
     loss is the mean energy, and aux_data is an AuxiliaryLossDataobject. The
     loss is averaged over the batch and over all devices inside a pmap.
   """
+  network = lambda *args, **kwargs: signed_network(*args, **kwargs)[1]
+  logdet_abs = lambda *args, **kwargs: signed_network(*args, **kwargs)[-1][
+      'logdet_abs']
   batch_local_energy = jax.vmap(local_energy, in_axes=(None, 0, 0), out_axes=0)
   batch_network = jax.vmap(network, in_axes=(None, 0), out_axes=0)
+  batch_logdet_abs = jax.vmap(logdet_abs, in_axes=(None, 0), out_axes=0)
+
+  # def grad_norm(params, single_example_batch):
+  #   grads = jax.grad(network)(params, single_example_batch)
+  #   nonempty_grads, _ = tree_flatten(grads)
+  #   total_grad_norm = jnp.linalg.norm(
+  #       [jnp.linalg.norm(neg.ravel()) for neg in nonempty_grads])
+  #   return jnp.square(total_grad_norm)
+
+  # grad_norm_batch = jax.vmap(grad_norm, in_axes=(None, 0), out_axes=0)
 
   @jax.custom_jvp
   def total_energy(
@@ -121,6 +140,10 @@ def make_loss(network: networks.LogFermiNetLike,
     e_l = k + v_ee + v_ae + v_aa
     loss = constants.pmean(jnp.mean(e_l))
     variance = constants.pmean(jnp.mean((e_l - loss)**2))
+    # if grad_norm_reg > 0.0:
+    #   stats['grad_norm'] = grad_norm_batch(params, data)
+    logdet_abs_val = batch_logdet_abs(params, data)
+    stats['logdet_abs'] = constants.pmean(jnp.mean(logdet_abs_val))
     return loss, AuxiliaryLossData(
         variance=variance,
         local_energy=e_l,
@@ -137,6 +160,7 @@ def make_loss(network: networks.LogFermiNetLike,
     params, key, data = primals
     loss, aux_data = total_energy(params, key, data)
 
+    # diff = e_l - E[e_l]
     if clip_local_energy > 0.0:
       # Try centering the window around the median instead of the mean?
       tv = jnp.mean(jnp.abs(aux_data.local_energy - loss))
@@ -154,9 +178,12 @@ def make_loss(network: networks.LogFermiNetLike,
     tangents = tangents[0], tangents[2]
     psi_primal, psi_tangent = jax.jvp(batch_network, primals, tangents)
     kfac_jax.register_normal_predictive_distribution(psi_primal[:, None])
+    _, logdet_abs_tangent = jax.jvp(batch_logdet_abs, primals, tangents)
     primals_out = loss, aux_data
     device_batch_size = jnp.shape(aux_data.local_energy)[0]
-    tangents_out = (jnp.dot(psi_tangent, diff) / device_batch_size, aux_data)
+    grad_est = jnp.dot(psi_tangent, diff)
+    reg = logdet_reg_lambda * jnp.mean(logdet_abs_tangent)
+    tangents_out = ((grad_est + reg) / device_batch_size, aux_data)
     return primals_out, tangents_out
 
   return total_energy

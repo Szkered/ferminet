@@ -52,6 +52,8 @@ def default() -> ml_collections.ConfigDict:
       # importlib.import_module.
       'config_module': __name__,
       'optim': {
+          'grad_norm_reg': 0.,
+          'logdet_reg_lambda': 0.,
           'iterations': 1000000,  # number of iterations
           'optimizer': 'kfac',  # one of adam, kfac, lamb, none
           'lr': {

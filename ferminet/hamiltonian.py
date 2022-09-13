@@ -171,7 +171,7 @@ def local_energy(f: networks.FermiNetLike,
   """
   del nspins
   log_abs_f = lambda *args, **kwargs: f(*args, **kwargs)[1]
-  f_stats = lambda *args, **kwargs: f(*args, **kwargs)[2]
+  f_stats = lambda *args, **kwargs: f(*args, **kwargs)[-1]
   ke = local_kinetic_energy(log_abs_f, use_scan=use_scan)
 
   def _e_l(params: networks.ParamTree, key: chex.PRNGKey,
