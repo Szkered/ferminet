@@ -14,6 +14,7 @@
 """Core training loop for neural QMC in JAX."""
 
 import collections
+import datetime
 import functools
 import importlib
 import time
@@ -363,8 +364,8 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
   else:
     raise RuntimeError
 
+  exp_name = FLAGS.exp_name + "-" + system_name
   if FLAGS.use_wandb:
-    exp_name = FLAGS.exp_name + "-" + system_name
     wandb.init(name=exp_name, project="QMC", config=flat_cfg)
 
   # Device logging
@@ -469,8 +470,9 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
   # found, then we check in restore_path.  This enables calculations to be
   # started from a previous calculation but then resume from their own
   # checkpoints in the event of pre-emption.
-
-  ckpt_save_path = checkpoint.create_save_path(cfg.log.save_path)
+  timestamp = datetime.datetime.now().strftime('%Y_%m_%d_%H:%M:%S')
+  save_path = cfg.log.save_path or f"{exp_name}_{timestamp}"
+  ckpt_save_path = checkpoint.create_save_path(save_path)
   ckpt_restore_path = checkpoint.get_restore_path(cfg.log.restore_path)
 
   ckpt_restore_filename = (checkpoint.find_last_checkpoint(ckpt_save_path) or
