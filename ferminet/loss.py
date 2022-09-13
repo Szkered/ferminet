@@ -103,14 +103,14 @@ def make_loss(
   batch_network = jax.vmap(network, in_axes=(None, 0), out_axes=0)
   batch_logdet_abs = jax.vmap(logdet_abs, in_axes=(None, 0), out_axes=0)
 
-  # def grad_norm(params, single_example_batch):
-  #   grads = jax.grad(network)(params, single_example_batch)
-  #   nonempty_grads, _ = tree_flatten(grads)
-  #   total_grad_norm = jnp.linalg.norm(
-  #       [jnp.linalg.norm(neg.ravel()) for neg in nonempty_grads])
-  #   return jnp.square(total_grad_norm)
+  def grad_norm(params, single_example_batch):
+    grads = jax.grad(network)(params, single_example_batch)
+    nonempty_grads, _ = tree_flatten(grads)
+    total_grad_norm = jnp.linalg.norm(
+        [jnp.linalg.norm(grad.ravel()) for grad in nonempty_grads])
+    return jnp.square(total_grad_norm)
 
-  # grad_norm_batch = jax.vmap(grad_norm, in_axes=(None, 0), out_axes=0)
+  grad_norm_batch = jax.vmap(grad_norm, in_axes=(None, 0), out_axes=0)
 
   @jax.custom_jvp
   def total_energy(
@@ -141,7 +141,7 @@ def make_loss(
     loss = constants.pmean(jnp.mean(e_l))
     variance = constants.pmean(jnp.mean((e_l - loss)**2))
     # if grad_norm_reg > 0.0:
-    #   stats['grad_norm'] = grad_norm_batch(params, data)
+    stats['grad_norm'] = grad_norm_batch(params, data)
     logdet_abs_val = batch_logdet_abs(params, data)
     stats['logdet_abs'] = constants.pmean(jnp.mean(logdet_abs_val))
     return loss, AuxiliaryLossData(
