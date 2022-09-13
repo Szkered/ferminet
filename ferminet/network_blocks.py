@@ -243,7 +243,7 @@ def log_linear_layer(
   else:
     act_fn = getattr(jax.nn, activation)
   if clip is not None:  # linear when y is small
-    cond = y > clip
+    cond = jnp.abs(y) > clip  # 1e-8
     offset = clip - act_fn(clip)  # to make sure act is continuous
     y_act = jnp.where(cond, act_fn(y) + sign * offset, y)
   else:
