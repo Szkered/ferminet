@@ -170,7 +170,8 @@ def default() -> ml_collections.ConfigDict:
       'network': {
           'detnet': {
               'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
-              'determinants': 16,
+              # 'hidden_dims': ((16, 0), (16, 0)),
+              'determinants': 32,
               'after_determinants': (1,),
           },
           'bias_orbitals': False,  # include bias in last layer to orbitals
@@ -195,10 +196,10 @@ def default() -> ml_collections.ConfigDict:
           'activation': 'tanh',  # activation before the slater determinant
           'nci': {  # neural CI
               'enable': True,
-              'dims': (16, 16),
+              'dims': (32, 32),
               'act': 'tanh',  # activation inside nci
               'clip': None,
-              'tau': 1.,
+              'tau': 1e-2,
               'residual': 'post_act',
               'softmax_w': True,
           },
@@ -206,7 +207,7 @@ def default() -> ml_collections.ConfigDict:
       'debug': {
           # Check optimizer state, parameters and loss and raise an exception if
           # NaN is found.
-          'check_nan': False,
+          'check_nan': True,
           'deterministic': False,  # Use a deterministic seed.
       },
       'pretrain': {
