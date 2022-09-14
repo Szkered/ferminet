@@ -110,7 +110,7 @@ def make_loss(
         [jnp.linalg.norm(grad.ravel()) for grad in nonempty_grads])
     return jnp.square(total_grad_norm)
 
-  grad_norm_batch = jax.vmap(grad_norm, in_axes=(None, 0), out_axes=0)
+  batch_grad_norm = jax.vmap(grad_norm, in_axes=(None, 0), out_axes=0)
 
   @jax.custom_jvp
   def total_energy(
@@ -141,7 +141,7 @@ def make_loss(
     loss = constants.pmean(jnp.mean(e_l))
     variance = constants.pmean(jnp.mean((e_l - loss)**2))
     # if grad_norm_reg > 0.0:
-    stats['grad_norm'] = grad_norm_batch(params, data)
+    stats['grad_norm'] = batch_grad_norm(params, data)
     logdet_abs_val = batch_logdet_abs(params, data)
     stats['logdet_abs'] = constants.pmean(jnp.mean(logdet_abs_val))
     return loss, AuxiliaryLossData(
@@ -178,11 +178,16 @@ def make_loss(
     tangents = tangents[0], tangents[2]
     psi_primal, psi_tangent = jax.jvp(batch_network, primals, tangents)
     kfac_jax.register_normal_predictive_distribution(psi_primal[:, None])
-    _, logdet_abs_tangent = jax.jvp(batch_logdet_abs, primals, tangents)
     primals_out = loss, aux_data
     device_batch_size = jnp.shape(aux_data.local_energy)[0]
     grad_est = jnp.dot(psi_tangent, diff)
-    reg = logdet_reg_lambda * jnp.mean(logdet_abs_tangent)
+
+    # _, logdet_abs_tangent = jax.jvp(batch_logdet_abs, primals, tangents)
+    # reg = logdet_reg_lambda * jnp.mean(logdet_abs_tangent)
+
+    _, grad_norm_tangent = jax.jvp(batch_grad_norm, primals, tangents)
+    reg = grad_norm_reg * jnp.mean(grad_norm_tangent)
+
     tangents_out = ((grad_est + reg) / device_batch_size, aux_data)
     return primals_out, tangents_out
 
