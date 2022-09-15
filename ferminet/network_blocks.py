@@ -169,6 +169,7 @@ def logdet_matmul(
               residual=options.nci_res,
               softmax_w=options.nci_softmax_w,
           )
+      debug_stats[f'logdet_abs_{i}'] = logdet
     det1d = 1  # HACK(@shizk): do we need to care about this?
 
   # log-sum-exp trick
