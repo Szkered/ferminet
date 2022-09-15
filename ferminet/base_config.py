@@ -169,7 +169,9 @@ def default() -> ml_collections.ConfigDict:
       },
       'network': {
           'detnet': {
-              'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
+              'two_e': False, # whether to use 2e stream
+              # 'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
+              'hidden_dims': ((32, 0), (32, 0)),
               # 'hidden_dims': ((16, 0), (16, 0)),
               'determinants': 32,
               'after_determinants': (1,),

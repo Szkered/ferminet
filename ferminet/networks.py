@@ -156,6 +156,7 @@ class FermiNetOptions:
     feature_layer: Feature object to create and apply the input features for the
       one- and two-electron layers.
   """
+  two_e: bool = True
   ndim: int = 3
   hidden_dims: FermiLayers = ((256, 32), (256, 32), (256, 32), (256, 32))
   after_determinants: Sequence[int] = (1,)
@@ -394,9 +395,10 @@ def init_fermi_net_params(
   #    vector (dim) and distance (1))
   feature_one_dims = natom * num_one_features
   feature_two_dims = num_two_features
-  dims_one_in = (
-      [nfeatures(feature_one_dims, feature_two_dims)] +
-      [nfeatures(hdim[0], hdim[1]) for hdim in options.hidden_dims[:-1]])
+  dims_one_in = ([nfeatures(feature_one_dims, feature_two_dims)] + [
+      nfeatures(hdim[0], hdim[1]) if options.two_e else hdim[0]
+      for hdim in options.hidden_dims[:-1]
+  ])
   dims_one_out = [hdim[0] for hdim in options.hidden_dims]
   if options.use_last_layer:
     dims_two_in = ([feature_two_dims] +
@@ -614,25 +616,38 @@ def fermi_net_orbitals(
   h_one = ae_features  # single-electron features
   h_two = ee_features  # two-electron features
   residual = lambda x, y: (x + y) / jnp.sqrt(2.0) if x.shape == y.shape else y
-  for i in range(len(params['double'])):
-    h_one_in = construct_symmetric_features(h_one, h_two, nspins)
 
-    # Execute next layer
-    h_one_next = act_fn(
-        network_blocks.linear_layer(h_one_in, **params['single'][i]))
-    h_two_next = act_fn(
-        network_blocks.vmap_linear_layer(h_two, params['double'][i]['w'],
-                                         params['double'][i]['b']))
-    h_one = residual(h_one, h_one_next)
-    h_two = residual(h_two, h_two_next)
-  if len(params['double']) != len(params['single']):
-    h_one_in = construct_symmetric_features(h_one, h_two, nspins)
-    h_one_next = act_fn(
-        network_blocks.linear_layer(h_one_in, **params['single'][-1]))
-    h_one = residual(h_one, h_one_next)
+  if options.two_e:
+    for i in range(len(params['double'])):
+      h_one_in = construct_symmetric_features(h_one, h_two, nspins)
+
+      # Execute next layer
+      h_one_next = act_fn(
+          network_blocks.linear_layer(h_one_in, **params['single'][i]))
+      h_two_next = act_fn(
+          network_blocks.vmap_linear_layer(h_two, params['double'][i]['w'],
+                                           params['double'][i]['b']))
+      h_one = residual(h_one, h_one_next)
+      h_two = residual(h_two, h_two_next)
+
+    if len(params['double']) != len(params['single']):
+      h_one_in = construct_symmetric_features(h_one, h_two, nspins)
+      h_one_next = act_fn(
+          network_blocks.linear_layer(h_one_in, **params['single'][-1]))
+      h_one = residual(h_one, h_one_next)
+      h_to_orbitals = h_one
+    else:
+      h_to_orbitals = construct_symmetric_features(h_one, h_two, nspins)
+
+  else:  # NO 2E / message passing
+    h_one = construct_symmetric_features(h_one, h_two, nspins)
+    for i in range(len(params['single'])):
+      h_one_next = act_fn(
+          network_blocks.linear_layer(h_one, **params['single'][i]))
+      h_one = residual(h_one, h_one_next)
+
     h_to_orbitals = h_one
-  else:
-    h_to_orbitals = construct_symmetric_features(h_one, h_two, nspins)
+
   if options.envelope.apply_type == envelopes.EnvelopeType.PRE_ORBITAL:
     envelope_factor = options.envelope.apply(ae=ae,
                                              r_ae=r_ae,
