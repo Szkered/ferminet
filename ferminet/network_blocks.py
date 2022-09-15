@@ -165,7 +165,7 @@ def logdet_matmul(
               prev_sign=sign_in,
               activation=options.nci_act,
               clip=options.nci_clip,
-              tau=options.nci_tau,
+              tau=options.nci_tau[i],
               residual=options.nci_res,
               softmax_w=options.nci_softmax_w,
           )
@@ -236,6 +236,7 @@ def log_linear_layer(
 
   # activation in original domain
   y = sign * jnp.exp(logy)
+  pre_act_mean = jnp.mean(y)
   y = y / tau
   y = jnp.nan_to_num(y)
   # activation in original domain
@@ -262,4 +263,4 @@ def log_linear_layer(
         in_axes=(0, 0, 0, 0),
         out_axes=0)(logx, logy_act, prev_sign, sign)
 
-  return logy_act, sign, jnp.mean(y), jnp.mean(y_act)
+  return logy_act, sign, pre_act_mean, jnp.mean(y_act)

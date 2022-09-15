@@ -199,7 +199,7 @@ def default() -> ml_collections.ConfigDict:
               'dims': (32, 32),
               'act': 'tanh',  # activation inside nci
               'clip': None,
-              'tau': 1e-2,
+              'tau': (1e-2, 1e-2),
               'residual': 'post_act',
               'softmax_w': True,
           },
@@ -207,7 +207,7 @@ def default() -> ml_collections.ConfigDict:
       'debug': {
           # Check optimizer state, parameters and loss and raise an exception if
           # NaN is found.
-          'check_nan': True,
+          'check_nan': False,
           'deterministic': False,  # Use a deterministic seed.
       },
       'pretrain': {
