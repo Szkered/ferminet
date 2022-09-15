@@ -155,22 +155,36 @@ def logdet_matmul(
       [slogdet(x) for x in xs if x.shape[-1] > 1], (1, 0))
 
   debug_stats = {'logdet_abs': jnp.mean(logdet)}
-  # logdet = logdet_in.copy()
+
   if options.use_nci:  # neural CI in log domain
-    for i in range(len(params['nci'])):
-      logdet, sign_in, debug_stats[f"pre_act_{i}"], debug_stats[
-          f"act_{i}"] = log_linear_layer(
-              logdet,
-              w=params['nci'][i]['w'],
-              prev_sign=sign_in,
-              activation=options.nci_act,
-              clip=options.nci_clip,
-              tau=options.nci_tau[i],
-              residual=options.nci_res,
-              softmax_w=options.nci_softmax_w,
-          )
-      debug_stats[f'logdet_abs_{i}'] = logdet
     det1d = 1  # HACK(@shizk): do we need to care about this?
+
+    if options.nci_remain_in_log:
+      for i in range(len(params['nci'])):
+        logdet, sign_in, debug_stats_ = log_linear_layer(
+            logdet,
+            params=params['nci'][i:i + 1],
+            prev_sign=sign_in,
+            activation=options.nci_act,
+            clip=options.nci_clip,
+            tau=options.nci_tau[i:i + 1],
+            residual=options.nci_res,
+            softmax_w=options.nci_softmax_w,
+        )
+        debug_stats = {**debug_stats, **debug_stats_}
+        debug_stats[f'logdet_abs_{i}'] = logdet
+    else:
+      logdet, sign_in, debug_stats_ = log_linear_layer(
+          logdet,
+          params=params['nci'],
+          prev_sign=sign_in,
+          activation=options.nci_act,
+          clip=options.nci_clip,
+          tau=options.nci_tau,
+          residual=options.nci_res,
+          softmax_w=options.nci_softmax_w,
+      )
+      debug_stats = {**debug_stats, **debug_stats_}
 
   # log-sum-exp trick
   maxlogdet = jnp.max(logdet)
@@ -182,9 +196,36 @@ def logdet_matmul(
   return sign_out, log_out, debug_stats
 
 
+def reduce_weighted_logsumexp(logx,
+                              w=None,
+                              axis=None,
+                              keep_dims=False,
+                              return_sign=False,
+                              name=None):
+  log_absw_x = logx + jnp.log(jnp.abs(w))
+  max_log_absw_x = jnp.max(log_absw_x, axis=axis, keepdims=True)
+  # If the largest element is `-inf` or `inf` then we don't bother subtracting
+  # off the max. We do this because otherwise we'd get `inf - inf = NaN`. That
+  # this is ok follows from the fact that we're actually free to subtract any
+  # value we like, so long as we add it back after taking the `log(sum(...))`.
+  max_log_absw_x = jnp.where(jnp.isinf(max_log_absw_x),
+                             jnp.zeros([], max_log_absw_x.dtype),
+                             max_log_absw_x)
+  wx_over_max_absw_x = (jnp.sign(w) * jnp.exp(log_absw_x - max_log_absw_x))
+  sum_wx_over_max_absw_x = jnp.sum(wx_over_max_absw_x,
+                                   axis=axis,
+                                   keepdims=keep_dims)
+  if not keep_dims:
+    max_log_absw_x = jnp.squeeze(max_log_absw_x, axis)
+  sgn = jnp.sign(sum_wx_over_max_absw_x)
+  lswe = max_log_absw_x + jnp.log(sgn * sum_wx_over_max_absw_x)
+  return lswe, sgn
+
+
 def log_linear_layer(
     logx: jnp.ndarray,
-    w: jnp.ndarray,
+    # w: jnp.ndarray,
+    params: Any,
     prev_sign: Optional[jnp.ndarray] = None,
     activation: str = 'tanh',
     clip: Optional[float] = None,
@@ -215,16 +256,18 @@ def log_linear_layer(
     log(abs(act(x @ w))): [B, last_hdim]
     sign(act(x @ w)): [B, last_hdim]
   """
+  debug_stats = {}
+
   if prev_sign is None:
     prev_sign = jnp.ones_like(logx)
   vmap_over_hidden = jax.vmap(
-      lambda logx, w, prev_sign: tfp.math.reduce_weighted_logsumexp(
+      lambda logx, w, prev_sign: reduce_weighted_logsumexp(
           logx=logx,
           w=(jax.nn.softmax(w) if softmax_w else w) * prev_sign,
           return_sign=True),
       in_axes=(None, 1, None),
       out_axes=0)
-  logy, sign = vmap_over_hidden(logx, w, prev_sign)
+  logy, sign = vmap_over_hidden(logx, params[0]['w'], prev_sign)
 
   # residule in original domain
   if residual == 'pre_act' and logx.shape == logy.shape:
@@ -236,9 +279,11 @@ def log_linear_layer(
 
   # activation in original domain
   y = sign * jnp.exp(logy)
-  pre_act_mean = jnp.mean(y)
-  y = y / tau
+  debug_stats['pre_act_0'] = jnp.mean(y)
+
+  y = y / tau[0]
   y = jnp.nan_to_num(y)
+
   # activation in original domain
   if 'lecun_tanh' in activation:
     alpha = float(activation.split('_')[-1])
@@ -251,6 +296,19 @@ def log_linear_layer(
     y_act = jnp.where(cond, act_fn(y) + sign * offset, y)
   else:
     y_act = act_fn(y)
+
+  # extra linears
+  residual = lambda x, y: (x + y) / jnp.sqrt(2.0) if x.shape == y.shape else y
+  for i in range(1, len(params)):
+    w = params[i]['w']
+    y_out = linear_layer(y, w=(jax.nn.softmax(w) if softmax_w else w))
+    debug_stats[f'pre_act_{i}'] = jnp.mean(y_out)
+    y_act = act_fn(y_out)
+    debug_stats[f'act_{i}'] = jnp.mean(y_act)
+    y = y / tau[i]
+    y = jnp.nan_to_num(y)
+    y = residual(y, y_act)
+
   sign = jnp.sign(y_act)
   logy_act = jnp.log(sign * y_act)
   logy_act = jnp.nan_to_num(logy_act)
@@ -263,4 +321,4 @@ def log_linear_layer(
         in_axes=(0, 0, 0, 0),
         out_axes=0)(logx, logy_act, prev_sign, sign)
 
-  return logy_act, sign, pre_act_mean, jnp.mean(y_act)
+  return logy_act, sign, debug_stats

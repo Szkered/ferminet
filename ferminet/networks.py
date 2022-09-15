@@ -176,6 +176,7 @@ class FermiNetOptions:
   nci_tau: float = 1.0
   nci_res: str = 'none'
   nci_softmax_w: bool = True
+  nci_remain_in_log: bool = True
 
 
 ## Network initialisation ##
@@ -803,6 +804,7 @@ def make_fermi_net(
       nci_tau=cfg.network.nci.tau,
       nci_res=cfg.network.nci.residual,
       nci_softmax_w=cfg.network.nci.softmax_w,
+      nci_remain_in_log=cfg.network.nci.remain_in_log,
       **cfg.network.detnet,
   )
 

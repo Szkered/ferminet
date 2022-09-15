@@ -171,6 +171,8 @@ def default() -> ml_collections.ConfigDict:
           'detnet': {
               'two_e': False, # whether to use 2e stream
               # 'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
+              # 'hidden_dims': ((32, 1), (32, 1), (32, 1), (32, 1)),
+              # 'hidden_dims': ((32, 0), (32, 0), (32, 0), (32, 0)),
               'hidden_dims': ((32, 0), (32, 0)),
               # 'hidden_dims': ((16, 0), (16, 0)),
               'determinants': 32,
@@ -198,6 +200,7 @@ def default() -> ml_collections.ConfigDict:
           'activation': 'tanh',  # activation before the slater determinant
           'nci': {  # neural CI
               'enable': True,
+              'remain_in_log': False,
               'dims': (32, 32),
               'act': 'tanh',  # activation inside nci
               'clip': None,
