@@ -286,19 +286,18 @@ def log_linear_layer(
 
   # activation in original domain
   if activation == 'none':
-    y_act = y
+    act_fn = lambda x: x
+  elif 'lecun_tanh' in activation:
+    alpha = float(activation.split('_')[-1])
+    act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
   else:
-    if 'lecun_tanh' in activation:
-      alpha = float(activation.split('_')[-1])
-      act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
-    else:
-      act_fn = getattr(jax.nn, activation)
-    if clip is not None:  # linear when y is small
-      cond = jnp.abs(y) > clip  # 1e-8
-      offset = clip - act_fn(clip)  # to make sure act is continuous
-      y_act = jnp.where(cond, act_fn(y) + sign * offset, y)
-    else:
-      y_act = act_fn(y)
+    act_fn = getattr(jax.nn, activation)
+  if clip is not None:  # linear when y is small
+    cond = jnp.abs(y) > clip  # 1e-8
+    offset = clip - act_fn(clip)  # to make sure act is continuous
+    y_act = jnp.where(cond, act_fn(y) + sign * offset, y)
+  else:
+    y_act = act_fn(y)
 
   # extra linears
   residual = lambda x, y: (x + y) / jnp.sqrt(2.0) if x.shape == y.shape else y
