@@ -52,8 +52,9 @@ def default() -> ml_collections.ConfigDict:
       # importlib.import_module.
       'config_module': __name__,
       'optim': {
-          'grad_norm_reg': 0.,
+          'grad_norm_reg': 0.0,
           'logdet_reg_lambda': 0.,
+          'nci_w_reg_lambda': 0.0,
           'iterations': 1000000,  # number of iterations
           'optimizer': 'kfac',  # one of adam, kfac, lamb, none
           'lr': {
@@ -171,9 +172,8 @@ def default() -> ml_collections.ConfigDict:
           'detnet': {
               'two_e': False, # whether to use 2e stream
               # 'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
-              # 'hidden_dims': ((32, 1), (32, 1), (32, 1), (32, 1)),
-              # 'hidden_dims': ((32, 0), (32, 0), (32, 0), (32, 0)),
-              'hidden_dims': ((32, 0), (32, 0)),
+              'hidden_dims': ((256, 0), (256, 0)),
+              # 'hidden_dims': ((32, 0), (32, 0)),
               # 'hidden_dims': ((16, 0), (16, 0)),
               'determinants': 32,
               'after_determinants': (1,),
@@ -202,7 +202,7 @@ def default() -> ml_collections.ConfigDict:
               'enable': True,
               'remain_in_log': False,
               'dims': (32, 32),
-              'act': 'tanh',  # activation inside nci
+              'act': 'none',  # activation inside nci
               'clip': None,
               'tau': (1e-2, 1e-2),
               'residual': 'post_act',

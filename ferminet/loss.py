@@ -77,6 +77,7 @@ def make_loss(
     clip_local_energy: float = 0.0,
     grad_norm_reg: float = 0.0,
     logdet_reg_lambda: float = 0.0,
+    nci_w_reg_lambda: float = 0.0,
 ) -> LossFn:
   """Creates the loss function, including custom gradients.
 
@@ -144,6 +145,8 @@ def make_loss(
     stats['grad_norm'] = batch_grad_norm(params, data)
     logdet_abs_val = batch_logdet_abs(params, data)
     stats['logdet_abs'] = constants.pmean(jnp.mean(logdet_abs_val))
+    stats['nci_w_norm'] = jnp.linalg.norm(
+        [jnp.linalg.norm(layer['w']) for layer in params['nci']])
     return loss, AuxiliaryLossData(
         variance=variance,
         local_energy=e_l,
@@ -182,11 +185,15 @@ def make_loss(
     device_batch_size = jnp.shape(aux_data.local_energy)[0]
     grad_est = jnp.dot(psi_tangent, diff)
 
-    # _, logdet_abs_tangent = jax.jvp(batch_logdet_abs, primals, tangents)
-    # reg = logdet_reg_lambda * jnp.mean(logdet_abs_tangent)
+    reg = 0.0
+
+    _, logdet_abs_tangent = jax.jvp(batch_logdet_abs, primals, tangents)
+    reg += logdet_reg_lambda * jnp.mean(logdet_abs_tangent)
 
     _, grad_norm_tangent = jax.jvp(batch_grad_norm, primals, tangents)
-    reg = grad_norm_reg * jnp.mean(grad_norm_tangent)
+    reg += grad_norm_reg * jnp.mean(grad_norm_tangent)
+
+    reg += nci_w_reg_lambda * aux_data.stats['nci_w_norm']
 
     tangents_out = ((grad_est + reg) / device_batch_size, aux_data)
     return primals_out, tangents_out

@@ -285,17 +285,20 @@ def log_linear_layer(
   y = jnp.nan_to_num(y)
 
   # activation in original domain
-  if 'lecun_tanh' in activation:
-    alpha = float(activation.split('_')[-1])
-    act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
+  if activation == 'none':
+    y_act = y
   else:
-    act_fn = getattr(jax.nn, activation)
-  if clip is not None:  # linear when y is small
-    cond = jnp.abs(y) > clip  # 1e-8
-    offset = clip - act_fn(clip)  # to make sure act is continuous
-    y_act = jnp.where(cond, act_fn(y) + sign * offset, y)
-  else:
-    y_act = act_fn(y)
+    if 'lecun_tanh' in activation:
+      alpha = float(activation.split('_')[-1])
+      act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
+    else:
+      act_fn = getattr(jax.nn, activation)
+    if clip is not None:  # linear when y is small
+      cond = jnp.abs(y) > clip  # 1e-8
+      offset = clip - act_fn(clip)  # to make sure act is continuous
+      y_act = jnp.where(cond, act_fn(y) + sign * offset, y)
+    else:
+      y_act = act_fn(y)
 
   # extra linears
   residual = lambda x, y: (x + y) / jnp.sqrt(2.0) if x.shape == y.shape else y
@@ -308,6 +311,12 @@ def log_linear_layer(
     y = y / tau[i]
     y = jnp.nan_to_num(y)
     y = residual(y, y_act)
+
+  if len(params) > 1:
+    y_act = jnp.sum(y)
+    sign = jnp.sign(y_act)
+    logy_act = jnp.log(sign * y_act)
+    return logy_act, sign, debug_stats
 
   sign = jnp.sign(y_act)
   logy_act = jnp.log(sign * y_act)
