@@ -145,8 +145,9 @@ def make_loss(
     stats['grad_norm'] = batch_grad_norm(params, data)
     logdet_abs_val = batch_logdet_abs(params, data)
     stats['logdet_abs'] = constants.pmean(jnp.mean(logdet_abs_val))
-    stats['nci_w_norm'] = jnp.linalg.norm(
-        [jnp.linalg.norm(layer['w']) for layer in params['nci']])
+    if 'nci' in params.keys():
+      stats['nci_w_norm'] = jnp.linalg.norm(
+          [jnp.linalg.norm(layer['w']) for layer in params['nci']])
     return loss, AuxiliaryLossData(
         variance=variance,
         local_energy=e_l,
@@ -193,7 +194,8 @@ def make_loss(
     _, grad_norm_tangent = jax.jvp(batch_grad_norm, primals, tangents)
     reg += grad_norm_reg * jnp.mean(grad_norm_tangent)
 
-    reg += nci_w_reg_lambda * aux_data.stats['nci_w_norm']
+    if 'nci' in params.keys():
+      reg += nci_w_reg_lambda * aux_data.stats['nci_w_norm']
 
     tangents_out = ((grad_est + reg) / device_batch_size, aux_data)
     return primals_out, tangents_out
