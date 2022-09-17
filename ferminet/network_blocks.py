@@ -67,13 +67,17 @@ def init_nci(
     key: chex.PRNGKey,
     input_dim: int,
     nci_dims: Sequence[int],
+    nci_tau: Sequence[float],
+    tau_target: Optional[float] = None,
 ) -> Sequence[Mapping[str, jnp.ndarray]]:
   nci = []
-  for out_dim in nci_dims:
+  for out_dim, init_tau in zip(nci_dims, nci_tau):
     nci.append({})
     key, subkey = jax.random.split(key, num=2)
     nci[-1]['w'] = (jax.random.normal(subkey, shape=(input_dim, out_dim)) /
                     jnp.sqrt(float(input_dim)))
+    if tau_target:
+      nci[-1]['tau'] = jnp.ones(1) * init_tau
     # NOTE(@shizk): no bias to keep antisymmetry
     input_dim = out_dim
   return nci
@@ -170,6 +174,7 @@ def logdet_matmul(
             tau=options.nci_tau[i:i + 1],
             residual=options.nci_res,
             softmax_w=options.nci_softmax_w,
+            tau_target=options.nci_tau_target,
         )
         debug_stats = {**debug_stats, **debug_stats_}
         debug_stats[f'logdet_abs_{i}'] = logdet
@@ -183,6 +188,7 @@ def logdet_matmul(
           tau=options.nci_tau,
           residual=options.nci_res,
           softmax_w=options.nci_softmax_w,
+          tau_target=options.nci_tau_target,
       )
       debug_stats = {**debug_stats, **debug_stats_}
 
@@ -224,7 +230,6 @@ def reduce_weighted_logsumexp(logx,
 
 def log_linear_layer(
     logx: jnp.ndarray,
-    # w: jnp.ndarray,
     params: Any,
     prev_sign: Optional[jnp.ndarray] = None,
     activation: str = 'tanh',
@@ -232,6 +237,7 @@ def log_linear_layer(
     tau: float = 1.,
     residual: str = 'none',
     softmax_w: bool = False,
+    tau_target: Optional[float] = None,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
   """Evaluate act(x @ w) in log domain, i.e. compute with logx.
 
@@ -281,7 +287,11 @@ def log_linear_layer(
   y = sign * jnp.exp(logy)
   debug_stats['pre_act_0'] = jnp.mean(y)
 
-  y = y / tau[0]
+  if tau_target:
+    y = y / params[0]['tau']
+    debug_stats['tau_loss'] = jax.nn.relu(y - tau_target)
+  else:
+    y = y / tau[0]
   y = jnp.nan_to_num(y)
 
   # activation in original domain
@@ -307,7 +317,11 @@ def log_linear_layer(
     debug_stats[f'pre_act_{i}'] = jnp.mean(y_out)
     y_act = act_fn(y_out)
     debug_stats[f'act_{i}'] = jnp.mean(y_act)
-    y = y / tau[i]
+    if tau_target:
+      y = y / params[i]['tau']
+      debug_stats['tau_loss'] += jax.nn.relu(y - tau_target)
+    else:
+      y = y / tau[i]
     y = jnp.nan_to_num(y)
     y = residual(y, y_act)
 

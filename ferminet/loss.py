@@ -100,9 +100,12 @@ def make_loss(
   network = lambda *args, **kwargs: signed_network(*args, **kwargs)[1]
   logdet_abs = lambda *args, **kwargs: signed_network(*args, **kwargs)[-1][
       'logdet_abs']
+  tau_loss = lambda *args, **kwargs: signed_network(*args, **kwargs)[-1][
+      'tau_loss']
   batch_local_energy = jax.vmap(local_energy, in_axes=(None, 0, 0), out_axes=0)
   batch_network = jax.vmap(network, in_axes=(None, 0), out_axes=0)
   batch_logdet_abs = jax.vmap(logdet_abs, in_axes=(None, 0), out_axes=0)
+  batch_tau_loss = jax.vmap(tau_loss, in_axes=(None, 0), out_axes=0)
 
   def grad_norm(params, single_example_batch):
     grads = jax.grad(network)(params, single_example_batch)
@@ -148,6 +151,9 @@ def make_loss(
     if 'nci' in params.keys():
       stats['nci_w_norm'] = jnp.linalg.norm(
           [jnp.linalg.norm(layer['w']) for layer in params['nci']])
+      if 'tau' in params['nci'][0].keys():
+        for i, layer in enumerate(params['nci']):
+          stats[f'tau_{i}'] = layer['tau']
     return loss, AuxiliaryLossData(
         variance=variance,
         local_energy=e_l,
@@ -196,6 +202,10 @@ def make_loss(
 
     if 'nci' in params.keys():
       reg += nci_w_reg_lambda * aux_data.stats['nci_w_norm']
+
+    if 'tau' in params['nci'][0].keys():
+      _, tau_loss_tangent = jax.jvp(batch_tau_loss, primals, tangents)
+      reg += 1 * jnp.mean(tau_loss_tangent)
 
     tangents_out = ((grad_est + reg) / device_batch_size, aux_data)
     return primals_out, tangents_out

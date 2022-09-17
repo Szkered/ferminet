@@ -52,8 +52,9 @@ def default() -> ml_collections.ConfigDict:
       # importlib.import_module.
       'config_module': __name__,
       'optim': {
-          'grad_norm_reg': 0.0,
-          'logdet_reg_lambda': 0.,
+          'grad_norm_reg': 1000.0,
+          # 'grad_norm_reg': 0.0,
+          'logdet_reg_lambda': 0.0,
           'nci_w_reg_lambda': 0.0,
           'iterations': 1000000,  # number of iterations
           'optimizer': 'kfac',  # one of adam, kfac, lamb, none
@@ -173,9 +174,10 @@ def default() -> ml_collections.ConfigDict:
               'two_e': False, # whether to use 2e stream
               # 'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
               'hidden_dims': ((256, 0), (256, 0)),
-              # 'hidden_dims': ((32, 0), (32, 0)),
+              # 'hidden_dims': ((64, 0), (64, 0)),
               # 'hidden_dims': ((16, 0), (16, 0)),
-              'determinants': 32,
+              # 'determinants': 64,
+              'determinants': 16,
               'after_determinants': (1,),
           },
           'bias_orbitals': False,  # include bias in last layer to orbitals
@@ -201,10 +203,12 @@ def default() -> ml_collections.ConfigDict:
           'nci': {  # neural CI
               'enable': True,
               'remain_in_log': False,
-              'dims': (32, 32),
-              'act': 'none',  # activation inside nci
-              'clip': None,
-              'tau': (1e-2, 1e-2),
+              'dims': (512, 512),
+              # 'dims': (64, 64),
+              'act': 'tanh',  # activation inside nci
+              'clip': None, # if not none, activation becomes linear within [-clip, clip]
+              'tau': (1e-3, 1e-2),
+              'tau_target': 1e-6, # if not none, tune tau to make activation below the target
               'residual': 'post_act',
               'softmax_w': True,
           },
