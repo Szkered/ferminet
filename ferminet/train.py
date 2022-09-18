@@ -19,6 +19,7 @@ import functools
 import importlib
 import time
 from typing import Optional, Sequence, Tuple, Union
+import requests
 
 import git
 from absl import logging, flags
@@ -372,6 +373,14 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
     commit_sha = repo.head.object.hexsha
     flat_cfg['branch'] = branch_name
     flat_cfg['commit'] = commit_sha
+    try:
+      flat_cfg['tpu_vm'] = requests.get(
+          "http://metadata/computeMetadata/v1/instance/description",
+          headers={
+              'Metadata-Flavor': 'Google'
+          }).text
+    except Exception as e:
+      logging.warn(e)
     wandb.init(name=exp_name, project="QMC", config=flat_cfg)
 
   # Device logging
