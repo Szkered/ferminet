@@ -302,10 +302,10 @@ def log_linear_layer(
     act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
   else:
     act_fn = getattr(jax.nn, activation)
-  if clip is not None:  # linear when y is small
+  if clip is not None:  # linear when y is LARGE
     cond = jnp.abs(y) > clip  # 1e-8
     offset = clip - act_fn(clip)  # to make sure act is continuous
-    y_act = jnp.where(cond, act_fn(y) + sign * offset, y)
+    y_act = jnp.where(cond, y - sign * offset, act_fn(y))
   else:
     y_act = act_fn(y)
 
@@ -319,7 +319,7 @@ def log_linear_layer(
     debug_stats[f'act_{i}'] = jnp.mean(y_act)
     if tau_target:
       y = y / params[i]['tau']
-      debug_stats['tau_loss'] += jax.nn.relu(y - tau_target)
+      debug_stats['tau_loss'] += jax.nn.relu(jnp.abs(y) - tau_target)
     else:
       y = y / tau[i]
     y = jnp.nan_to_num(y)
