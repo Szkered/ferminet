@@ -78,6 +78,7 @@ def make_loss(
     grad_norm_reg: float = 0.0,
     logdet_reg_lambda: float = 0.0,
     nci_w_reg_lambda: float = 0.0,
+    tau_loss_lambda: float = 0.0,
 ) -> LossFn:
   """Creates the loss function, including custom gradients.
 
@@ -203,9 +204,9 @@ def make_loss(
     if 'nci' in params.keys():
       reg += nci_w_reg_lambda * aux_data.stats['nci_w_norm']
 
-    if 'tau' in params['nci'][0].keys():
-      _, tau_loss_tangent = jax.jvp(batch_tau_loss, primals, tangents)
-      reg += 1 * jnp.mean(tau_loss_tangent)
+      if 'tau' in params['nci'][0].keys():
+        _, tau_loss_tangent = jax.jvp(batch_tau_loss, primals, tangents)
+        reg += tau_loss_lambda * jnp.mean(tau_loss_tangent)
 
     tangents_out = ((grad_est + reg) / device_batch_size, aux_data)
     return primals_out, tangents_out
