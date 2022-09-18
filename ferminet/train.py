@@ -233,6 +233,8 @@ def make_opt_update_step(evaluate_loss: qmc_loss_functions.LossFn,
     """Evaluates the loss and gradients and updates the parameters using optax."""
     (loss, aux_data), grad = loss_and_grad(params, key, data)
     grad = constants.pmean(grad)
+    # TODO(@shizk): check this
+    grad = jax.tree_util.tree_map(jnp.nan_to_num, grad)
     updates, opt_state = optimizer.update(grad, opt_state, params)
     params = optax.apply_updates(params, updates)
     return params, opt_state, loss, aux_data
