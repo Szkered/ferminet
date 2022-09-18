@@ -370,6 +370,7 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
     repo = git.Repo(search_parent_directories=True)
     branch_name = repo.active_branch.name
     commit_sha = repo.head.object.hexsha
+    flat_cfg['branch'] = branch_name
     flat_cfg['commit'] = commit_sha
     wandb.init(name=exp_name, project="QMC", config=flat_cfg)
 
