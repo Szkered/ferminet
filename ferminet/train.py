@@ -20,6 +20,7 @@ import importlib
 import time
 from typing import Optional, Sequence, Tuple, Union
 
+import git
 from absl import logging, flags
 import chex
 from ferminet import checkpoint
@@ -366,6 +367,10 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
 
   exp_name = FLAGS.exp_name + "-" + system_name
   if FLAGS.use_wandb:
+    repo = git.Repo(search_parent_directories=True)
+    branch_name = repo.active_branch.name
+    commit_sha = repo.head.object.hexsha
+    flat_cfg['commit'] = commit_sha
     wandb.init(name=exp_name, project="QMC", config=flat_cfg)
 
   # Device logging
