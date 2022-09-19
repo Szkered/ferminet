@@ -79,6 +79,7 @@ def make_loss(
     logdet_reg_lambda: float = 0.0,
     nci_w_reg_lambda: float = 0.0,
     tau_loss_lambda: float = 0.0,
+    clip_lambda: float = 0.0,
 ) -> LossFn:
   """Creates the loss function, including custom gradients.
 
@@ -103,10 +104,13 @@ def make_loss(
       'logdet_abs']
   tau_loss = lambda *args, **kwargs: signed_network(*args, **kwargs)[-1][
       'tau_loss']
+  clip_loss = lambda *args, **kwargs: signed_network(*args, **kwargs)[-1][
+      'clip_loss']
   batch_local_energy = jax.vmap(local_energy, in_axes=(None, 0, 0), out_axes=0)
   batch_network = jax.vmap(network, in_axes=(None, 0), out_axes=0)
   batch_logdet_abs = jax.vmap(logdet_abs, in_axes=(None, 0), out_axes=0)
   batch_tau_loss = jax.vmap(tau_loss, in_axes=(None, 0), out_axes=0)
+  batch_clip_loss = jax.vmap(clip_loss, in_axes=(None, 0), out_axes=0)
 
   def grad_norm(params, single_example_batch):
     grads = jax.grad(network)(params, single_example_batch)
@@ -152,9 +156,10 @@ def make_loss(
     if 'nci' in params.keys():
       stats['nci_w_norm'] = jnp.linalg.norm(
           [jnp.linalg.norm(layer['w']) for layer in params['nci']])
-      if 'tau' in params['nci'][0].keys():
-        for i, layer in enumerate(params['nci']):
-          stats[f'tau_{i}'] = layer['tau']
+      for i, layer in enumerate(params['nci']):
+        for key in ['tau', 'clip']:
+          if key in params['nci'][i].keys():
+            stats[f'{key}_{i}'] = layer[key]
     return loss, AuxiliaryLossData(
         variance=variance,
         local_energy=e_l,
@@ -210,6 +215,10 @@ def make_loss(
       if 'tau' in params['nci'][0].keys() and tau_loss_lambda > 0.0:
         _, tau_loss_tangent = jax.jvp(batch_tau_loss, primals, tangents)
         reg += tau_loss_lambda * jnp.mean(tau_loss_tangent)
+
+    if clip_lambda > 0.0:
+      _, clip_loss_tangent = jax.jvp(batch_clip_loss, primals, tangents)
+      reg += clip_lambda * jnp.mean(clip_loss_tangent)
 
     tangents_out = ((grad_est + reg) / device_batch_size, aux_data)
     return primals_out, tangents_out

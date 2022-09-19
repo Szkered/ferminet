@@ -178,6 +178,7 @@ class FermiNetOptions:
   nci_softmax_w: bool = True
   nci_remain_in_log: bool = True
   nci_tau_target: bool = False
+  nci_trainable_clip: bool = False
 
 
 ## Network initialisation ##
@@ -481,6 +482,7 @@ def init_fermi_net_params(
         nci_dims=options.nci_dims,
         nci_tau=options.nci_tau,
         tau_target=options.nci_tau_target,
+        clip_target=options.nci_clip if options.nci_trainable_clip else None,
     )
 
   return params
@@ -809,6 +811,7 @@ def make_fermi_net(
       nci_softmax_w=cfg.network.nci.softmax_w,
       nci_remain_in_log=cfg.network.nci.remain_in_log,
       nci_tau_target=cfg.network.nci.tau_target,
+      nci_trainable_clip=cfg.optim.clip_lambda > 0.,
       **cfg.network.detnet,
   )
 

@@ -587,6 +587,7 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
       logdet_reg_lambda=cfg.optim.logdet_reg_lambda,
       nci_w_reg_lambda=cfg.optim.nci_w_reg_lambda,
       tau_loss_lambda=cfg.optim.tau_loss_lambda,
+      clip_lambda=cfg.optim.clip_lambda,
   )
 
   # Compute the learning rate

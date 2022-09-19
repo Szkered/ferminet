@@ -69,6 +69,7 @@ def init_nci(
     nci_dims: Sequence[int],
     nci_tau: Sequence[float],
     tau_target: Optional[float] = None,
+    clip_target: Optional[float] = None,
 ) -> Sequence[Mapping[str, jnp.ndarray]]:
   nci = []
   for out_dim, init_tau in zip(nci_dims, nci_tau):
@@ -78,6 +79,8 @@ def init_nci(
                     jnp.sqrt(float(input_dim)))
     if tau_target:
       nci[-1]['tau'] = jnp.ones(1) * init_tau
+    if clip_target:
+      nci[-1]['clip'] = jnp.ones(1) * clip_target
     # NOTE(@shizk): no bias to keep antisymmetry
     input_dim = out_dim
   return nci
@@ -302,7 +305,11 @@ def log_linear_layer(
     act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
   else:
     act_fn = getattr(jax.nn, activation)
-  if clip is not None:  # linear when y is LARGE
+  trainable_clip = 'clip' in params[0].keys()
+  if clip is not None or 'clip' in params[0].keys():  # linear when y is LARGE
+    if trainable_clip:
+      clip = jnp.abs(params[0]['clip'])
+      debug_stats['clip_loss'] = jax.nn.relu(jnp.abs(y) - clip)
     cond = jnp.abs(y) > clip  # 1e-8
     offset = clip - act_fn(clip)  # to make sure act is continuous
     y_act = jnp.where(cond, y - sign * offset, act_fn(y))
@@ -315,8 +322,17 @@ def log_linear_layer(
     w = params[i]['w']
     y_out = linear_layer(y, w=(jax.nn.softmax(w) if softmax_w else w))
     debug_stats[f'pre_act_{i}'] = jnp.mean(y_out)
-    y_act = act_fn(y_out)
-    debug_stats[f'act_{i}'] = jnp.mean(y_act)
+    trainable_clip = 'clip' in params[i].keys()
+    if clip is not None or trainable_clip:  # linear when y is LARGE
+      if trainable_clip:
+        clip = jnp.abs(params[i]['clip'])
+        debug_stats['clip_loss'] += jax.nn.relu(jnp.abs(y) - clip)
+      cond = jnp.abs(y) > clip  # 1e-8
+      offset = clip - act_fn(clip)  # to make sure act is continuous
+      y_act = jnp.where(cond, y - sign * offset, act_fn(y))
+    else:
+      y_act = act_fn(y)
+      debug_stats[f'act_{i}'] = jnp.mean(y_act)
     if tau_target:
       y = y / jnp.abs(params[i]['tau'])
       debug_stats['tau_loss'] += jax.nn.relu(jnp.abs(y) - tau_target)

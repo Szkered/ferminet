@@ -57,6 +57,7 @@ def default() -> ml_collections.ConfigDict:
           'logdet_reg_lambda': 0.0,
           'nci_w_reg_lambda': 0.0,
           'tau_loss_lambda': 1.0,
+          'clip_lambda': 0.0,
           # 'tau_loss_lambda': 100.0,
           'iterations': 1000000,  # number of iterations
           'optimizer': 'kfac',  # one of adam, kfac, lamb, none
@@ -176,7 +177,7 @@ def default() -> ml_collections.ConfigDict:
               'two_e': False, # whether to use 2e stream
               # 'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
               'hidden_dims': ((256, 0), (256, 0)),
-              'determinants': 64,
+              'determinants': 16,
               # 'hidden_dims': ((64, 0), (64, 0)),
               # 'hidden_dims': ((20, 0), (20, 0)),
               # 'determinants': 16,
@@ -209,9 +210,9 @@ def default() -> ml_collections.ConfigDict:
               'dims': (64, 64),
               # 'dims': (32, 32, 32),
               'act': 'tanh',  # activation inside nci
-              'clip': None, # if not none, activation becomes linear within [-clip, clip]
-              'tau': (1e-3, 1e-2),
-              'tau_target': 1e-4, # if not none, tune tau to make activation below the target
+              'clip': 1.0, # if not none, activation becomes linear within [-clip, clip]
+              'tau': (1.0, 1.0),
+              'tau_target': 1.0, # if not none, tune tau to make activation below the target
               'residual': 'post_act',
               'softmax_w': True,
           },
