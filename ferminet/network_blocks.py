@@ -288,8 +288,8 @@ def log_linear_layer(
   debug_stats['pre_act_0'] = jnp.mean(y)
 
   if tau_target:
-    y = y / params[0]['tau']
-    debug_stats['tau_loss'] = jax.nn.relu(y - tau_target)
+    y = y / jnp.abs(params[0]['tau'])
+    debug_stats['tau_loss'] = jax.nn.relu(jnp.abs(y) - tau_target)
   else:
     y = y / tau[0]
   y = jnp.nan_to_num(y)
@@ -318,7 +318,7 @@ def log_linear_layer(
     y_act = act_fn(y_out)
     debug_stats[f'act_{i}'] = jnp.mean(y_act)
     if tau_target:
-      y = y / params[i]['tau']
+      y = y / jnp.abs(params[i]['tau'])
       debug_stats['tau_loss'] += jax.nn.relu(jnp.abs(y) - tau_target)
     else:
       y = y / tau[i]
