@@ -176,9 +176,9 @@ def default() -> ml_collections.ConfigDict:
           'detnet': {
               'two_e': False, # whether to use 2e stream
               # 'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
-              'hidden_dims': ((256, 0), (256, 0)),
-              'determinants': 16,
-              # 'hidden_dims': ((64, 0), (64, 0)),
+              # 'hidden_dims': ((256, 0), (256, 0)),
+              'determinants': 128,
+              'hidden_dims': ((64, 0), (64, 0)),
               # 'hidden_dims': ((20, 0), (20, 0)),
               # 'determinants': 16,
               'after_determinants': (1,),
@@ -207,12 +207,12 @@ def default() -> ml_collections.ConfigDict:
               'enable': True,
               'remain_in_log': False,
               # 'dims': (512, 512),
-              'dims': (64, 64),
+              'dims': (128, 128),
               # 'dims': (32, 32, 32),
               'act': 'tanh',  # activation inside nci
               'clip': 1.0, # if not none, activation becomes linear within [-clip, clip]
               'tau': (1.0, 1.0),
-              'tau_target': 1.0, # if not none, tune tau to make activation below the target
+              'tau_target': None, # if not none, tune tau to make activation below the target
               'residual': 'post_act',
               'softmax_w': True,
           },

@@ -303,6 +303,8 @@ def log_linear_layer(
   elif 'lecun_tanh' in activation:
     alpha = float(activation.split('_')[-1])
     act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
+  elif activation == 'xe':
+    act_fn = lambda x: x * (jnp.exp(-x**2) + 1)
   else:
     act_fn = getattr(jax.nn, activation)
   trainable_clip = 'clip' in params[0].keys()
