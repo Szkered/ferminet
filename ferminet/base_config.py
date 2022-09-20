@@ -56,7 +56,7 @@ def default() -> ml_collections.ConfigDict:
           'grad_norm_reg': 0.0,
           'logdet_reg_lambda': 0.0,
           'nci_w_reg_lambda': 0.0,
-          'tau_loss_lambda': 1.0,
+          'tau_loss_lambda': 0.0,
           'clip_lambda': 0.0,
           # 'tau_loss_lambda': 100.0,
           'iterations': 1000000,  # number of iterations
@@ -209,12 +209,12 @@ def default() -> ml_collections.ConfigDict:
               # 'dims': (512, 512),
               'dims': (128, 128),
               # 'dims': (32, 32, 32),
-              'act': 'tanh',  # activation inside nci
-              'clip': 1.0, # if not none, activation becomes linear within [-clip, clip]
+              'act': 'xe',  # activation inside nci
+              'clip': None, # if not none, activation becomes linear within [-clip, clip]
               'tau': (1.0, 1.0),
               'tau_target': None, # if not none, tune tau to make activation below the target
               'residual': 'post_act',
-              'softmax_w': True,
+              'softmax_w': False,
           },
       },
       'debug': {
