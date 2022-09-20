@@ -376,14 +376,14 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
     commit_sha = repo.head.object.hexsha
     flat_cfg['branch'] = branch_name
     flat_cfg['commit'] = commit_sha
-    try:
-      flat_cfg['host'] = requests.get(
+    host = socket.gethostname()
+    if 't1v' in host:
+      host = requests.get(
           "http://metadata/computeMetadata/v1/instance/description",
           headers={
               'Metadata-Flavor': 'Google'
           }).text
-    except Exception:
-      flat_cfg['host'] = socket.gethostname()
+    flat_cfg['host'] = host
     wandb.init(name=exp_name, project="QMC", config=flat_cfg)
 
   # Device logging
