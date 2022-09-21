@@ -208,7 +208,8 @@ def default() -> ml_collections.ConfigDict:
           'activation': 'tanh',  # activation before the slater determinant
           'nci': {  # neural CI
               'enable': True,
-              'remain_in_log': False, # NOTE(@shizk): don't set to True
+              'first_layer_in_log': True,
+              'remain_in_log': False,
               'dims': (512, 512),
               # 'dims': (32, 32),
               'act': ('tanh', 'tanh'),  # activation inside nci

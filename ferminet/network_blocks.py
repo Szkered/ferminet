@@ -192,6 +192,7 @@ def logdet_matmul(
           residual=options.nci_res,
           softmax_w=options.nci_softmax_w,
           tau_target=options.nci_tau_target,
+          in_log=options.nci_first_layer_in_log,
       )
       debug_stats = {**debug_stats, **debug_stats_}
 
@@ -255,17 +256,11 @@ def log_linear_layer(
     residual: str = 'none',
     softmax_w: bool = False,
     tau_target: Optional[float] = None,
+    in_log: bool = True,
 ) -> Tuple[jnp.ndarray, jnp.ndarray, Mapping[str, jnp.ndarray]]:
   """Evaluate act(x @ w) in log domain, i.e. compute with logx.
 
   No bias to keep antisymmetry.
-
-  TODO(@shizk): conjecture: any activation function that is only zero
-  at origin works, as it does not alter the nodal structure
-
-  TODO(@shizk): why tanh doesn't work?
-
-  TODO(@shizk): kfac registration
 
   Args:
     logx: inputs in log domain [B, in_dim]
@@ -273,7 +268,11 @@ def log_linear_layer(
     prev_sign: sign from the previous log linear layer [B, in_dim]
     activation: activation function.
     clip: if not None, activation becomes linear within the range [-clip, clip]
-    tau: temperature
+    tau: width of activation
+    residual: whether to use residual
+    softmax_w: whether to softmax the weights
+    tau_target: auto tune tau
+    in_log: whether to do the first layer computation in log domain
 
   Returns:
     log(abs(act(x @ w))): [B, last_hdim]
@@ -289,17 +288,25 @@ def log_linear_layer(
     if i == 0:  # first layer is from log domain
       if prev_sign is None:
         prev_sign = jnp.ones_like(logx)
-      vmap_over_hidden = jax.vmap(
-          lambda logx, w, prev_sign: reduce_weighted_logsumexp(
-              logx=logx,
-              w=(jax.nn.softmax(w) if softmax_w else w) * prev_sign,
-              return_sign=True),
-          in_axes=(None, 1, None),
-          out_axes=0)
-      log_wx, sign = vmap_over_hidden(logx, params[i]['w'], prev_sign)
 
-      # go back to original domain
-      wx = sign * jnp.exp(log_wx)
+      if in_log:  # do the linear layer in log domain
+        vmap_over_hidden = jax.vmap(
+            lambda logx, w, prev_sign: reduce_weighted_logsumexp(
+                logx=logx,
+                w=(jax.nn.softmax(w) if softmax_w else w) * prev_sign,
+                return_sign=True),
+            in_axes=(None, 1, None),
+            out_axes=0)
+        log_wx, sign = vmap_over_hidden(logx, params[i]['w'], prev_sign)
+
+        # go back to original domain
+        wx = sign * jnp.exp(log_wx)
+
+      else:  # convert input back to the original domain
+        x = prev_sign * jnp.exp(logx)
+        w = params[i]['w']
+        wx = linear_layer(x, w=(jax.nn.softmax(w) if softmax_w else w))
+        sign = jnp.sign(wx)
 
     else:
       w = params[i]['w']
