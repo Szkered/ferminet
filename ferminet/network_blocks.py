@@ -334,7 +334,7 @@ def log_linear_layer(
       y_act = jnp.where(cond, y - sign * offset, act_fn(y))
     else:
       y_act = act_fn(y)
-      debug_stats[f'act_{i}'] = jnp.mean(y_act)
+    debug_stats[f'act_{i}'] = jnp.mean(y_act)
     if tau_target:
       y = y / jnp.abs(params[i]['tau'])
       debug_stats['tau_loss'] += jax.nn.relu(jnp.abs(y) - tau_target)

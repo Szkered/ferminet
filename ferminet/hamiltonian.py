@@ -13,7 +13,7 @@
 # limitations under the License.
 """Evaluating the Hamiltonian on a wavefunction."""
 
-from typing import Any, Sequence
+from typing import Any, Sequence, Optional
 
 from absl import flags
 import chex
@@ -61,8 +61,7 @@ class MakeLocalEnergy(Protocol):
     """
 
 
-def local_kinetic_energy(f: networks.LogFermiNetLike,
-                         use_scan: bool = False) -> networks.LogFermiNetLike:
+def local_kinetic_energy(f: networks.LogFermiNetLike, use_scan: bool = False):
   r"""Creates a function to for the local kinetic energy, -1/2 \nabla^2 ln|f|.
 
   Args:
@@ -74,23 +73,74 @@ def local_kinetic_energy(f: networks.LogFermiNetLike,
     -1/2f \nabla^2 f = -1/2 (\nabla^2 log|f| + (\nabla log|f|)^2).
   """
 
-  def _lapl_over_f(params, data):
+  def _lapl_over_f(params, data, v=None):
     n = data.shape[0]
-    eye = jnp.eye(n)
     grad_f = jax.grad(f, argnums=1)
     grad_f_closure = lambda x: grad_f(params, x)
+
     primal, dgrad_f = jax.linearize(grad_f_closure, data)
+    first_d = jnp.sum(primal**2)
+    eye = jnp.eye(n)
 
     if use_scan:
       _, diagonal = lax.scan(lambda i, _: (i + 1, dgrad_f(eye[i])[i]),
                              0,
                              None,
                              length=n)
-      result = -0.5 * jnp.sum(diagonal)
+      second_d = jnp.sum(diagonal)
     else:
-      result = -0.5 * lax.fori_loop(
-          0, n, lambda i, val: val + dgrad_f(eye[i])[i], 0.0)
-    return result - 0.5 * jnp.sum(primal**2)
+      second_d = lax.fori_loop(0, n, lambda i, val: val + dgrad_f(eye[i])[i],
+                               0.0)
+    return first_d, second_d
+
+  return _lapl_over_f
+
+
+def local_kinetic_energy_fd(f: networks.LogFermiNetLike,
+                            use_scan: bool = False):
+  """calculate ke with finite difference"""
+
+  def _lapl_over_f(params, data, v, eps=0.1):
+    """
+    Args:
+      eps: the difference used in FD
+    """
+    n = data.shape[0]
+    grad_f = jax.grad(f, argnums=1)
+    grad_f_closure = lambda y: grad_f(params, y)
+
+    eps = eps * jnp.mean(jnp.abs(data))  # scale by data scale
+    v = v / jnp.linalg.norm(v, axis=0, keepdims=True) * eps  # normalize
+    grad_P, grad_N = grad_f_closure(data + v), grad_f_closure(data - v)
+
+    first = jnp.sum(jnp.square(grad_P + grad_N), axis=0) / 4
+    second = jnp.dot(v, grad_P - grad_N) * n / (2 * eps**2)
+    return first, second
+
+  return _lapl_over_f
+
+
+def local_kinetic_energy_hutchinson(f, use_scan: bool = False):
+
+  def _lapl_over_f(params, data, v):
+    n = data.shape[0]
+    grad_f = jax.grad(f, argnums=1)
+    grad_f_closure = lambda x: grad_f(params, x)
+
+    primal, dgrad_f = jax.linearize(grad_f_closure, data)
+    first_d = jnp.sum(primal**2)
+    eye = jnp.eye(n)
+
+    if use_scan:
+      _, diagonal = lax.scan(lambda i, _: (i + 1, dgrad_f(eye[i])[i] * v[i]**2),
+                             0,
+                             None,
+                             length=n)
+      second_d = jnp.sum(diagonal)
+    else:
+      second_d = lax.fori_loop(
+          0, n, lambda i, val: val + dgrad_f(eye[i])[i] * v[i]**2, 0.0)
+    return first_d, second_d
 
   return _lapl_over_f
 
@@ -153,7 +203,8 @@ def local_energy(f: networks.FermiNetLike,
                  atoms: jnp.ndarray,
                  charges: jnp.ndarray,
                  nspins: Sequence[int],
-                 use_scan: bool = False) -> LocalEnergy:
+                 use_scan: bool = False,
+                 kinetic: str = 'baseline') -> LocalEnergy:
   """Creates the function to evaluate the local energy.
 
   Args:
@@ -172,10 +223,20 @@ def local_energy(f: networks.FermiNetLike,
   del nspins
   log_abs_f = lambda *args, **kwargs: f(*args, **kwargs)[1]
   f_stats = lambda *args, **kwargs: f(*args, **kwargs)[-1]
-  ke = local_kinetic_energy(log_abs_f, use_scan=use_scan)
 
-  def _e_l(params: networks.ParamTree, key: chex.PRNGKey,
-           data: jnp.ndarray) -> jnp.ndarray:
+  if kinetic == 'baseline':
+    ke = local_kinetic_energy(log_abs_f, use_scan=use_scan)
+  elif kinetic == 'hutchinson':
+    ke = local_kinetic_energy_hutchinson(log_abs_f, use_scan=use_scan)
+  elif kinetic == 'fd':
+    ke = local_kinetic_energy_fd(log_abs_f, use_scan=use_scan)
+  else:
+    raise RuntimeError
+
+  def _e_l(params: networks.ParamTree,
+           key: chex.PRNGKey,
+           data: jnp.ndarray,
+           v: Optional[jnp.ndarray] = None) -> jnp.ndarray:
     """Returns the total energy.
 
     Args:
@@ -189,11 +250,11 @@ def local_energy(f: networks.FermiNetLike,
     v_ee = potential_electron_electron(r_ee)
     v_ae = potential_electron_nuclear(charges, r_ae)
     v_aa = potential_nuclear_nuclear(charges, atoms)
-    kinetic = ke(params, data)
+    k_first, k_second = ke(params, data, v)
     if FLAGS.log_debug_stats:
       stats = f_stats(params, data)
     else:
       stats = {}
-    return kinetic, v_ee, v_ae, v_aa, stats
+    return k_first, k_second, v_ee, v_ae, v_aa, stats
 
   return _e_l
