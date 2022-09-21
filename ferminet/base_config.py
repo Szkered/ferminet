@@ -215,7 +215,7 @@ def default() -> ml_collections.ConfigDict:
               'clip': (1.0, None), # if not none, activation becomes linear within [-clip, clip]
               'tau': (1e-3, 1e-2),
               'tau_target': None, # if not none, tune tau to make activation below the target
-              'residual': 'post_act',
+              'residual': 'post_act', # not used (always post_act)
               'softmax_w': True,
           },
       },

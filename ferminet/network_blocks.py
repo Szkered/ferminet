@@ -255,7 +255,7 @@ def log_linear_layer(
     residual: str = 'none',
     softmax_w: bool = False,
     tau_target: Optional[float] = None,
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+) -> Tuple[jnp.ndarray, jnp.ndarray, Mapping[str, jnp.ndarray]]:
   """Evaluate act(x @ w) in log domain, i.e. compute with logx.
 
   No bias to keep antisymmetry.
@@ -280,98 +280,83 @@ def log_linear_layer(
     sign(act(x @ w)): [B, last_hdim]
   """
   debug_stats = {}
-
-  if prev_sign is None:
-    prev_sign = jnp.ones_like(logx)
-  vmap_over_hidden = jax.vmap(
-      lambda logx, w, prev_sign: reduce_weighted_logsumexp(
-          logx=logx,
-          w=(jax.nn.softmax(w) if softmax_w else w) * prev_sign,
-          return_sign=True),
-      in_axes=(None, 1, None),
-      out_axes=0)
-  logy, sign = vmap_over_hidden(logx, params[0]['w'], prev_sign)
-
-  # residule in original domain
-  if residual == 'pre_act' and logx.shape == logy.shape:
-    logy, sign = jax.vmap(
-        lambda logx, logy, prev_sign, sign: tfp.math.reduce_weighted_logsumexp(
-            logx=[logx, logy], w=[prev_sign, sign], return_sign=True),
-        in_axes=(0, 0, 0, 0),
-        out_axes=0)(logx, logy, prev_sign, sign)
-
-  # activation in original domain
-  y = sign * jnp.exp(logy)
-  debug_stats['pre_act_0'] = jnp.mean(y)
-
-  if tau_target:
-    y = y / jnp.abs(params[0]['tau'])
-    debug_stats['tau_loss'] = jax.nn.relu(jnp.abs(y) - tau_target)
-  else:
-    y = y / tau[0]
-  y = jnp.nan_to_num(y)
-
-  # activation in original domain
-  act_fn = make_act_fn(activation[0])
-
-  trainable_clip = 'clip' in params[0].keys()
-  if clip[0] is not None or 'clip' in params[0].keys(
-  ):  # linear when y is LARGE
-    if trainable_clip:
-      clip_val = jnp.abs(params[0]['clip'])
-      debug_stats['clip_loss'] = jax.nn.relu(jnp.abs(y) - clip_val)
-    else:
-      clip_val = clip[0]
-    cond = jnp.abs(y) > clip_val  # 1e-8
-    offset = clip_val - act_fn(clip_val)  # to make sure act is continuous
-    y_act = jnp.where(cond, y - sign * offset, act_fn(y))
-  else:
-    y_act = act_fn(y)
-
-  # extra linears
+  has_extra_linear = len(params) > 1
   residual = lambda x, y: (x + y) / jnp.sqrt(2.0) if x.shape == y.shape else y
-  for i in range(1, len(params)):
-    w = params[i]['w']
-    y_out = linear_layer(y, w=(jax.nn.softmax(w) if softmax_w else w))
-    debug_stats[f'pre_act_{i}'] = jnp.mean(y_out)
-    trainable_clip = 'clip' in params[i].keys()
+
+  x: jnp.ndarray
+  for i in range(len(params)):
+    # LINEAR LAYER
+    if i == 0:  # first layer is from log domain
+      if prev_sign is None:
+        prev_sign = jnp.ones_like(logx)
+      vmap_over_hidden = jax.vmap(
+          lambda logx, w, prev_sign: reduce_weighted_logsumexp(
+              logx=logx,
+              w=(jax.nn.softmax(w) if softmax_w else w) * prev_sign,
+              return_sign=True),
+          in_axes=(None, 1, None),
+          out_axes=0)
+      log_wx, sign = vmap_over_hidden(logx, params[i]['w'], prev_sign)
+
+      # go back to original domain
+      wx = sign * jnp.exp(log_wx)
+
+    else:
+      w = params[i]['w']
+      wx = linear_layer(x, w=(jax.nn.softmax(w) if softmax_w else w))
+      sign = jnp.sign(wx)
+
+    debug_stats[f'pre_act_{i}'] = jnp.mean(wx)
+
+    # SCALE: change the "width" of the activation function
+    if tau_target:
+      wx = wx / jnp.abs(params[i]['tau'])
+      debug_stats['tau_loss'] += jax.nn.relu(jnp.abs(wx) - tau_target)
+    else:
+      wx = wx / tau[i]
+    wx = jnp.nan_to_num(wx)
+
+    # ACT+CILP
     act_fn = make_act_fn(activation[i])
-    if clip[i] is not None or trainable_clip:  # linear when y is LARGE
-      if trainable_clip:
+    trainable_clip = 'clip' in params[i].keys()
+    if clip[i] is not None or trainable_clip:  # linear when wx is LARGE
+      if trainable_clip:  # adjust clip_val s.t. clip doesn't happen very often
         clip_val = jnp.abs(params[i]['clip'])
-        debug_stats['clip_loss'] += jax.nn.relu(jnp.abs(y) - clip_val)
+        debug_stats['clip_loss'] += jax.nn.relu(jnp.abs(wx) - clip_val)
       else:
         clip_val = clip[i]
-      cond = jnp.abs(y) > clip_val  # 1e-8
+      cond = jnp.abs(wx) > clip_val  # 1e-8
       offset = clip_val - act_fn(clip_val)  # to make sure act is continuous
-      y_act = jnp.where(cond, y - sign * offset, act_fn(y))
+      y = jnp.where(cond, wx - sign * offset, act_fn(wx))
     else:
-      y_act = act_fn(y)
-    debug_stats[f'act_{i}'] = jnp.mean(y_act)
-    if tau_target:
-      y = y / jnp.abs(params[i]['tau'])
-      debug_stats['tau_loss'] += jax.nn.relu(jnp.abs(y) - tau_target)
-    else:
-      y = y / tau[i]
+      y = act_fn(wx)
+
+    debug_stats[f'act_{i}'] = jnp.mean(y)
     y = jnp.nan_to_num(y)
-    y = residual(y, y_act)
 
-  if len(params) > 1:
-    y_act = jnp.sum(y)
-    sign = jnp.sign(y_act)
-    logy_act = jnp.log(sign * y_act)
-    return logy_act, sign, debug_stats
+    # RESIDUAL
+    if i == len(params) - 1:  # last layer
+      if has_extra_linear:
+        y = residual(x, y)
 
-  sign = jnp.sign(y_act)
-  logy_act = jnp.log(sign * y_act)
-  logy_act = jnp.nan_to_num(logy_act)
+      # convert back to log domain
+      sign = jnp.sign(y)
+      logy = jnp.log(sign * y)
+      logy = jnp.nan_to_num(logy)
 
-  # residule in original domain
-  if residual == 'post_act' and logx.shape == logy_act.shape:
-    logy_act, sign = jax.vmap(
-        lambda logx, logy, prev_sign, sign: tfp.math.reduce_weighted_logsumexp(
-            logx=[logx, logy], w=[prev_sign, sign], return_sign=True),
-        in_axes=(0, 0, 0, 0),
-        out_axes=0)(logx, logy_act, prev_sign, sign)
+      # residual in log domain since input/x is in log domain
+      if not has_extra_linear and residual == 'post_act' and logx.shape == logy.shape:
+        logy, sign = jax.vmap(
+            lambda logx, logy, prev_sign, sign: reduce_weighted_logsumexp(
+                logx=[logx, logy], w=[prev_sign, sign], return_sign=True),
+            in_axes=(0, 0, 0, 0),
+            out_axes=0)(logx, logy, prev_sign, sign)
 
-  return logy_act, sign, debug_stats
+      return logy, sign, debug_stats
+
+    else:  # not the last layer
+      if i == 0:
+        # for the first layer, convert the input from log domain
+        x = prev_sign * jnp.exp(logx)
+      # for all subsequence layers, x is already in the original domain
+      x = residual(x, y)
