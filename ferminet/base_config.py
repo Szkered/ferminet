@@ -214,6 +214,7 @@ def default() -> ml_collections.ConfigDict:
               # 'dims': (32, 32),
               'act': ('tanh', 'tanh'),  # activation inside nci
               'clip': (1.0, None), # if not none, activation becomes linear within [-clip, clip]
+              'leak': 1.0, # leak coeff for pre-act in clip range
               'tau': (1e-3, 1e-2),
               'tau_target': None, # if not none, tune tau to make activation below the target
               'residual': 'post_act', # not used (always post_act)

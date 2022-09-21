@@ -180,6 +180,7 @@ class FermiNetOptions:
   nci_remain_in_log: bool = True
   nci_tau_target: bool = False
   nci_trainable_clip: bool = False
+  nci_leak: float = 0.5
 
 
 ## Network initialisation ##
@@ -815,6 +816,7 @@ def make_fermi_net(
       nci_remain_in_log=cfg.network.nci.remain_in_log,
       nci_tau_target=cfg.network.nci.tau_target,
       nci_trainable_clip=cfg.optim.clip_lambda > 0.,
+      nci_leak=cfg.network.nci.leak,
       **cfg.network.detnet,
   )
 

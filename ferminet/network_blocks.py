@@ -178,6 +178,7 @@ def logdet_matmul(
             residual=options.nci_res,
             softmax_w=options.nci_softmax_w,
             tau_target=options.nci_tau_target,
+            leak=options.nci_leak,
         )
         debug_stats = {**debug_stats, **debug_stats_}
         debug_stats[f'logdet_abs_{i}'] = logdet
@@ -193,6 +194,7 @@ def logdet_matmul(
           softmax_w=options.nci_softmax_w,
           tau_target=options.nci_tau_target,
           in_log=options.nci_first_layer_in_log,
+          leak=options.nci_leak,
       )
       debug_stats = {**debug_stats, **debug_stats_}
 
@@ -236,11 +238,12 @@ def make_act_fn(activation: str) -> Callable:
   # activation in original domain
   if activation == 'none':
     act_fn = lambda x: x
-  elif 'lecun_tanh' in activation[0]:
+  elif 'lecun_tanh' in activation:
     alpha = float(activation.split('_')[-1])
     act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
-  elif activation == 'xe':
-    act_fn = lambda x: x * (jnp.exp(-x**2) + 1)
+  elif 'xe' in activation:
+    leak = float(activation.split('_')[-1])
+    act_fn = lambda x: x * (jnp.exp(-x**2) + leak)
   else:
     act_fn = getattr(jax.nn, activation)
   return act_fn
@@ -257,6 +260,7 @@ def log_linear_layer(
     softmax_w: bool = False,
     tau_target: Optional[float] = None,
     in_log: bool = True,
+    leak: float = 0.5,
 ) -> Tuple[jnp.ndarray, jnp.ndarray, Mapping[str, jnp.ndarray]]:
   """Evaluate act(x @ w) in log domain, i.e. compute with logx.
 
@@ -334,7 +338,7 @@ def log_linear_layer(
         clip_val = clip[i]
       cond = jnp.abs(wx) > clip_val  # 1e-8
       offset = clip_val - act_fn(clip_val)  # to make sure act is continuous
-      y = jnp.where(cond, wx - sign * offset, act_fn(wx))
+      y = jnp.where(cond, leak * wx - sign * offset, act_fn(wx))
     else:
       y = act_fn(wx)
 
