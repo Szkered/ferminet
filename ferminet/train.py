@@ -579,7 +579,8 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
                                             atoms=atoms,
                                             charges=charges,
                                             nspins=nspins,
-                                            use_scan=False)
+                                            use_scan=False,
+                                            kinetic=cfg.mcmc.kinetic)
   evaluate_loss = qmc_loss_functions.make_loss(
       signed_network,
       local_energy,
@@ -588,6 +589,9 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
       nci_w_reg_lambda=cfg.optim.nci_w_reg_lambda,
       tau_loss_lambda=cfg.optim.tau_loss_lambda,
       clip_lambda=cfg.optim.clip_lambda,
+      kinetic=cfg.mcmc.kinetic,
+      control_variate=cfg.mcmc.control_variate,
+      control_variate_mom=cfg.mcmc.control_variate_mom,
   )
 
   # Compute the learning rate

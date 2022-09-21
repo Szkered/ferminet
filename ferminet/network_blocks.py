@@ -295,7 +295,7 @@ def log_linear_layer(
     debug_stats['tau_loss'] = jax.nn.relu(jnp.abs(y) - tau_target)
   else:
     y = y / tau[0]
-  y = jnp.nan_to_num(y)
+  # y = jnp.nan_to_num(y)
 
   # activation in original domain
   if activation == 'none':
@@ -340,7 +340,7 @@ def log_linear_layer(
       debug_stats['tau_loss'] += jax.nn.relu(jnp.abs(y) - tau_target)
     else:
       y = y / tau[i]
-    y = jnp.nan_to_num(y)
+    # y = jnp.nan_to_num(y)
     y = residual(y, y_act)
 
   if len(params) > 1:
@@ -351,7 +351,7 @@ def log_linear_layer(
 
   sign = jnp.sign(y_act)
   logy_act = jnp.log(sign * y_act)
-  logy_act = jnp.nan_to_num(logy_act)
+  # logy_act = jnp.nan_to_num(logy_act)
 
   # residule in original domain
   if residual == 'post_act' and logx.shape == logy_act.shape:

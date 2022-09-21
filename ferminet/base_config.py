@@ -144,6 +144,10 @@ def default() -> ml_collections.ConfigDict:
           'make_local_energy_kwargs': {},
       },
       'mcmc': {
+          'use_sgld': False,  # If true, use mh with sgld
+          'kinetic': 'baseline', # the method used for computing kinetic
+          'control_variate': False,  # Use control variate by fisher=0
+          'control_variate_mom': 0.99,  # momentum of control variate
           # Note: HMC options are not currently used.
           # Number of burn in steps after pretraining.  If zero do not burn in
           # or reinitialize walkers.
@@ -170,14 +174,13 @@ def default() -> ml_collections.ConfigDict:
           # mean of the distance to the nuclei.
           'scale_by_nuclear_distance': False,
           'one_electron': False,  # If true, use one-electron moves
-          'use_sgld': False,  # If true, use mh with sgld
       },
       'network': {
           'detnet': {
               'two_e': False, # whether to use 2e stream
               # 'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
               # 'hidden_dims': ((256, 0), (256, 0)),
-              'determinants': 128,
+              'determinants': 32,
               'hidden_dims': ((64, 0), (64, 0)),
               # 'hidden_dims': ((20, 0), (20, 0)),
               # 'determinants': 16,
@@ -207,14 +210,13 @@ def default() -> ml_collections.ConfigDict:
               'enable': True,
               'remain_in_log': False,
               # 'dims': (512, 512),
-              'dims': (128, 128),
-              # 'dims': (32, 32, 32),
+              'dims': (32, 32),
               'act': 'xe',  # activation inside nci
               'clip': None, # if not none, activation becomes linear within [-clip, clip]
               'tau': (1.0, 1.0),
               'tau_target': None, # if not none, tune tau to make activation below the target
               'residual': 'post_act',
-              'softmax_w': False,
+              'softmax_w': True,
           },
       },
       'debug': {
