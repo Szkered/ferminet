@@ -286,6 +286,11 @@ def log_linear_layer(
   has_extra_linear = len(params) > 1
   residual = lambda x, y: (x + y) / jnp.sqrt(2.0) if x.shape == y.shape else y
 
+  if tau_target:
+    debug_stats['tau_loss'] = 0
+  if 'clip' in params[0].keys():
+    debug_stats['clip_loss'] = 0
+
   x: jnp.ndarray
   for i in range(len(params)):
     # LINEAR LAYER
