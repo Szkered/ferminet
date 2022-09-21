@@ -52,11 +52,11 @@ def default() -> ml_collections.ConfigDict:
       # importlib.import_module.
       'config_module': __name__,
       'optim': {
-          # 'grad_norm_reg': 1000.0,
-          'grad_norm_reg': 0.0,
+          'grad_norm_reg': 1000.0,
+          #'grad_norm_reg': 0.0,
           'logdet_reg_lambda': 0.0,
           'nci_w_reg_lambda': 0.0,
-          'tau_loss_lambda': 0.0,
+          'tau_loss_lambda': 1.0,
           'clip_lambda': 0.0,
           # 'tau_loss_lambda': 100.0,
           'iterations': 1000000,  # number of iterations
