@@ -179,11 +179,11 @@ def default() -> ml_collections.ConfigDict:
           'detnet': {
               'two_e': False, # whether to use 2e stream
               # 'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
-              # 'hidden_dims': ((256, 0), (256, 0)),
-              'determinants': 32,
-              'hidden_dims': ((64, 0), (64, 0)),
+              'hidden_dims': ((256, 0), (256, 0)),
+              # 'hidden_dims': ((64, 0), (64, 0)),
               # 'hidden_dims': ((20, 0), (20, 0)),
-              # 'determinants': 16,
+              'determinants': 16,
+              # 'determinants': 32,
               'after_determinants': (1,),
           },
           'bias_orbitals': False,  # include bias in last layer to orbitals
@@ -208,12 +208,12 @@ def default() -> ml_collections.ConfigDict:
           'activation': 'tanh',  # activation before the slater determinant
           'nci': {  # neural CI
               'enable': True,
-              'remain_in_log': False,
-              # 'dims': (512, 512),
-              'dims': (32, 32),
-              'act': 'xe',  # activation inside nci
-              'clip': None, # if not none, activation becomes linear within [-clip, clip]
-              'tau': (1.0, 1.0),
+              'remain_in_log': False, # NOTE(@shizk): don't set to True
+              'dims': (512, 512),
+              # 'dims': (32, 32),
+              'act': ('tanh', 'tanh'),  # activation inside nci
+              'clip': (1.0, None), # if not none, activation becomes linear within [-clip, clip]
+              'tau': (1e-3, 1e-2),
               'tau_target': None, # if not none, tune tau to make activation below the target
               'residual': 'post_act',
               'softmax_w': True,

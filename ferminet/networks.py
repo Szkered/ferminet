@@ -482,7 +482,8 @@ def init_fermi_net_params(
         nci_dims=options.nci_dims,
         nci_tau=options.nci_tau,
         tau_target=options.nci_tau_target,
-        clip_target=options.nci_clip if options.nci_trainable_clip else None,
+        clip_target=options.nci_clip if options.nci_trainable_clip else [None] *
+        len(options.nci_clip),
     )
 
   return params

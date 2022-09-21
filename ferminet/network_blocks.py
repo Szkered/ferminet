@@ -15,7 +15,7 @@
 
 import functools
 import itertools
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from typing import Any, Mapping, Optional, Sequence, Tuple, Callable
 
 import chex
 import jax
@@ -69,18 +69,18 @@ def init_nci(
     nci_dims: Sequence[int],
     nci_tau: Sequence[float],
     tau_target: Optional[float] = None,
-    clip_target: Optional[float] = None,
+    clip_target: Sequence[Optional[float]] = None,
 ) -> Sequence[Mapping[str, jnp.ndarray]]:
   nci = []
-  for out_dim, init_tau in zip(nci_dims, nci_tau):
+  for out_dim, init_tau, init_clip in zip(nci_dims, nci_tau, clip_target):
     nci.append({})
     key, subkey = jax.random.split(key, num=2)
     nci[-1]['w'] = (jax.random.normal(subkey, shape=(input_dim, out_dim)) /
                     jnp.sqrt(float(input_dim)))
     if tau_target:
       nci[-1]['tau'] = jnp.ones(1) * init_tau
-    if clip_target:
-      nci[-1]['clip'] = jnp.ones(1) * clip_target
+    if init_clip:
+      nci[-1]['clip'] = jnp.ones(1) * init_clip
     # NOTE(@shizk): no bias to keep antisymmetry
     input_dim = out_dim
   return nci
@@ -172,8 +172,8 @@ def logdet_matmul(
             logdet,
             params=params['nci'][i:i + 1],
             prev_sign=sign_in,
-            activation=options.nci_act,
-            clip=options.nci_clip,
+            activation=options.nci_act[i:i + 1],
+            clip=options.nci_clip[i:i + 1],
             tau=options.nci_tau[i:i + 1],
             residual=options.nci_res,
             softmax_w=options.nci_softmax_w,
@@ -231,13 +231,27 @@ def reduce_weighted_logsumexp(logx,
   return lswe, sgn
 
 
+def make_act_fn(activation: str) -> Callable:
+  # activation in original domain
+  if activation == 'none':
+    act_fn = lambda x: x
+  elif 'lecun_tanh' in activation[0]:
+    alpha = float(activation.split('_')[-1])
+    act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
+  elif activation == 'xe':
+    act_fn = lambda x: x * (jnp.exp(-x**2) + 1)
+  else:
+    act_fn = getattr(jax.nn, activation)
+  return act_fn
+
+
 def log_linear_layer(
     logx: jnp.ndarray,
     params: Any,
     prev_sign: Optional[jnp.ndarray] = None,
-    activation: str = 'tanh',
-    clip: Optional[float] = None,
-    tau: float = 1.,
+    activation: Sequence[str] = ['tanh'],
+    clip: Sequence[Optional[float]] = [None],
+    tau: Sequence[float] = [1.],
     residual: str = 'none',
     softmax_w: bool = False,
     tau_target: Optional[float] = None,
@@ -298,22 +312,18 @@ def log_linear_layer(
   y = jnp.nan_to_num(y)
 
   # activation in original domain
-  if activation == 'none':
-    act_fn = lambda x: x
-  elif 'lecun_tanh' in activation:
-    alpha = float(activation.split('_')[-1])
-    act_fn = lambda x: 1.7159 * jax.nn.tanh(x * 2. / 3.) + alpha * x
-  elif activation == 'xe':
-    act_fn = lambda x: x * (jnp.exp(-x**2) + 1)
-  else:
-    act_fn = getattr(jax.nn, activation)
+  act_fn = make_act_fn(activation[0])
+
   trainable_clip = 'clip' in params[0].keys()
-  if clip is not None or 'clip' in params[0].keys():  # linear when y is LARGE
+  if clip[0] is not None or 'clip' in params[0].keys(
+  ):  # linear when y is LARGE
     if trainable_clip:
-      clip = jnp.abs(params[0]['clip'])
-      debug_stats['clip_loss'] = jax.nn.relu(jnp.abs(y) - clip)
-    cond = jnp.abs(y) > clip  # 1e-8
-    offset = clip - act_fn(clip)  # to make sure act is continuous
+      clip_val = jnp.abs(params[0]['clip'])
+      debug_stats['clip_loss'] = jax.nn.relu(jnp.abs(y) - clip_val)
+    else:
+      clip_val = clip[0]
+    cond = jnp.abs(y) > clip_val  # 1e-8
+    offset = clip_val - act_fn(clip_val)  # to make sure act is continuous
     y_act = jnp.where(cond, y - sign * offset, act_fn(y))
   else:
     y_act = act_fn(y)
@@ -325,12 +335,15 @@ def log_linear_layer(
     y_out = linear_layer(y, w=(jax.nn.softmax(w) if softmax_w else w))
     debug_stats[f'pre_act_{i}'] = jnp.mean(y_out)
     trainable_clip = 'clip' in params[i].keys()
-    if clip is not None or trainable_clip:  # linear when y is LARGE
+    act_fn = make_act_fn(activation[i])
+    if clip[i] is not None or trainable_clip:  # linear when y is LARGE
       if trainable_clip:
-        clip = jnp.abs(params[i]['clip'])
-        debug_stats['clip_loss'] += jax.nn.relu(jnp.abs(y) - clip)
-      cond = jnp.abs(y) > clip  # 1e-8
-      offset = clip - act_fn(clip)  # to make sure act is continuous
+        clip_val = jnp.abs(params[i]['clip'])
+        debug_stats['clip_loss'] += jax.nn.relu(jnp.abs(y) - clip_val)
+      else:
+        clip_val = clip[i]
+      cond = jnp.abs(y) > clip_val  # 1e-8
+      offset = clip_val - act_fn(clip_val)  # to make sure act is continuous
       y_act = jnp.where(cond, y - sign * offset, act_fn(y))
     else:
       y_act = act_fn(y)
