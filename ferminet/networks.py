@@ -157,6 +157,7 @@ class FermiNetOptions:
       one- and two-electron layers.
   """
   two_e: bool = True
+  two_e_to_orbital: bool = True
   ndim: int = 3
   hidden_dims: FermiLayers = ((256, 32), (256, 32), (256, 32), (256, 32))
   after_determinants: Sequence[int] = (1,)
@@ -414,13 +415,15 @@ def init_fermi_net_params(
                    [hdim[1] for hdim in options.hidden_dims[:-2]])
     dims_two_out = [hdim[1] for hdim in options.hidden_dims[:-1]]
 
-  if not options.use_last_layer:
+  if options.use_last_layer:
+    dims_orbital_in = nfeatures(options.hidden_dims[-1][0],
+                                options.hidden_dims[-1][1])
+  elif options.two_e_to_orbital:
+    dims_orbital_in = nfeatures(options.hidden_dims[-1][0], feature_two_dims)
+  else:
     # Just pass the activations from the final layer of the one-electron stream
     # directly to orbital shaping.
     dims_orbital_in = options.hidden_dims[-1][0]
-  else:
-    dims_orbital_in = nfeatures(options.hidden_dims[-1][0],
-                                options.hidden_dims[-1][1])
 
   # How many spin-orbitals do we need to create per spin channel?
   nspin_orbitals = []
@@ -655,7 +658,10 @@ def fermi_net_orbitals(
           network_blocks.linear_layer(h_one, **params['single'][i]))
       h_one = residual(h_one, h_one_next)
 
-    h_to_orbitals = h_one
+    if options.two_e_to_orbital:
+      h_to_orbitals = construct_symmetric_features(h_one, h_two, nspins)
+    else:
+      h_to_orbitals = h_one
 
   if options.envelope.apply_type == envelopes.EnvelopeType.PRE_ORBITAL:
     envelope_factor = options.envelope.apply(ae=ae,

@@ -52,8 +52,8 @@ def default() -> ml_collections.ConfigDict:
       # importlib.import_module.
       'config_module': __name__,
       'optim': {
-          'grad_norm_reg': 1000.0,
-          #'grad_norm_reg': 0.0,
+          # 'grad_norm_reg': 1000.0,
+          'grad_norm_reg': 0.0,
           'logdet_reg_lambda': 0.0,
           'nci_w_reg_lambda': 0.0,
           'tau_loss_lambda': 1.0,
@@ -178,11 +178,12 @@ def default() -> ml_collections.ConfigDict:
       'network': {
           'detnet': {
               'two_e': False, # whether to use 2e stream
+              'two_e_to_orbital': True, # whether to pass 2e features directly to orbitals
               # 'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
-              'hidden_dims': ((256, 0), (256, 0)),
-              # 'hidden_dims': ((64, 0), (64, 0)),
+              # 'hidden_dims': ((256, 0), (256, 0)),
+              'hidden_dims': ((64, 0), (64, 0)),
               # 'hidden_dims': ((20, 0), (20, 0)),
-              'determinants': 16,
+              'determinants': 64,
               # 'determinants': 32,
               'after_determinants': (1,),
           },
@@ -208,15 +209,17 @@ def default() -> ml_collections.ConfigDict:
           'activation': 'tanh',  # activation before the slater determinant
           'nci': {  # neural CI
               'enable': True,
-              'first_layer_in_log': True,
+              'first_layer_in_log': False,
               'remain_in_log': False,
-              'dims': (512, 512),
+              'dims': (128, 128, 128),
               # 'dims': (32, 32),
-              'act': ('tanh', 'tanh'),  # activation inside nci
-              'clip': (1.0, None), # if not none, activation becomes linear within [-clip, clip]
+              'act': ('xe_1', 'xe_1', 'xe_1'),  # activation inside nci
+              'clip': (None, None, None), # if not none, activation becomes linear within [-clip, clip]
+              # 'act': ('tanh', 'tanh'),  # activation inside nci
+              # 'clip': (1.0, None), # if not none, activation becomes linear within [-clip, clip]
               'leak': 1.0, # leak coeff for pre-act in clip range
-              'tau': (1e-3, 1e-2),
-              'tau_target': None, # if not none, tune tau to make activation below the target
+              'tau': (1e-4, 1e-3, 1e-2),
+              'tau_target': 1.0, # if not none, tune tau to make activation below the target
               'residual': 'post_act', # not used (always post_act)
               'softmax_w': True,
           },
