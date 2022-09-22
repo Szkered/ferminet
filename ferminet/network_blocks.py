@@ -352,7 +352,7 @@ def log_linear_layer(
 
     # RESIDUAL
     if i == len(params) - 1:  # last layer
-      if has_extra_linear:
+      if has_extra_linear and residual == 'post_act':
         y = residual(x, y)
 
       # convert back to log domain
@@ -370,9 +370,12 @@ def log_linear_layer(
 
       return logy, sign, debug_stats
 
-    else:  # not the last layer
+    elif residual == 'post_act':  # residual not in the last layer
       if i == 0:
         # for the first layer, convert the input from log domain
         x = prev_sign * jnp.exp(logx)
       # for all subsequence layers, x is already in the original domain
       x = residual(x, y)
+
+    else:  # no residual
+      x = y
