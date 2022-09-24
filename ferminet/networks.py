@@ -520,7 +520,7 @@ def init_fermi_net_params(
     key, subkey = jax.random.split(key, num=2)
     params['nci'] = network_blocks.init_nci(
         key=subkey,
-        input_dim=options.determinants,
+        input_dim=options.orb_mix_channels or options.determinants,
         nci_dims=options.nci_dims,
         nci_tau=options.nci_tau,
         tau_target=options.nci_tau_target,
