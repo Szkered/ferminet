@@ -180,8 +180,8 @@ def default() -> ml_collections.ConfigDict:
               'two_e': False, # whether to use 2e stream
               'two_e_to_orbital': False, # whether to pass 2e features directly to orbitals
               # 'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
-              # 'hidden_dims': ((256, 0), (256, 0)),
-              'hidden_dims': ((64, 0), (64, 0)),
+              'hidden_dims': ((256, 0), (256, 0)),
+              # 'hidden_dims': ((64, 0), (64, 0)),
               # 'hidden_dims': ((20, 0), (20, 0)),
               'determinants': 16,
               # 'determinants': 32,
@@ -211,17 +211,17 @@ def default() -> ml_collections.ConfigDict:
           'activation': 'tanh',  # activation before the slater determinant
           'nci': {  # neural CI
               'enable': True,
-              'first_layer_in_log': False,
+              'first_layer_in_log': True,
               'remain_in_log': False,
-              'dims': (128, 128, 128),
+              'dims': (512, 512),
               # 'dims': (32, 32),
-              'act': ('xe_1', 'xe_1', 'xe_1'),  # activation inside nci
-              'clip': (None, None, None), # if not none, activation becomes linear within [-clip, clip]
-              # 'act': ('tanh', 'tanh'),  # activation inside nci
-              # 'clip': (1.0, None), # if not none, activation becomes linear within [-clip, clip]
+              # 'act': ('xe_1', 'xe_1', 'xe_1'),  # activation inside nci
+              # 'clip': (None, None, None), # if not none, activation becomes linear within [-clip, clip]
+              'act': ('tanh', 'tanh'),  # activation inside nci
+              'clip': (1.0, 1.0), # if not none, activation becomes linear within [-clip, clip]
               'leak': 1.0, # leak coeff for pre-act in clip range
-              'tau': (1e-4, 1e-3, 1e-2),
-              'tau_target': 1.0, # if not none, tune tau to make activation below the target
+              'tau': (1e-3, 1e-2),
+              'tau_target': None, # if not none, tune tau to make activation below the target
               'residual': 'post_act', # not used (always post_act)
               'softmax_w': True,
           },
