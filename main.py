@@ -21,6 +21,7 @@ from ferminet import train
 from ml_collections.config_flags import config_flags
 from copy import deepcopy
 import wandb
+import jax
 
 # internal imports
 
@@ -34,6 +35,7 @@ config_flags.DEFINE_config_file('config', None, 'Path to config file.')
 
 
 def main(_):
+  jax.config.update("jax_enable_x64", True)
   raw_cfg = FLAGS.config
   if FLAGS.run_all:
     system_type = raw_cfg.config_module[1:]
