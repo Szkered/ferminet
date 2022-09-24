@@ -54,7 +54,7 @@ def default() -> ml_collections.ConfigDict:
       'optim': {
           # 'grad_norm_reg': 1000.0,
           'grad_norm_reg': 0.0,
-          'logdet_reg_lambda': 0.0,
+          'logdet_reg_lambda': 1.0,
           'nci_w_reg_lambda': 0.0,
           'tau_loss_lambda': 1.0,
           'clip_lambda': 0.0,
@@ -186,7 +186,7 @@ def default() -> ml_collections.ConfigDict:
               'determinants': 16,
               # 'determinants': 32,
               'after_determinants': (1,),
-              'orb_mix_channels': None, # if not None, mix orbitals before det calc
+              'orb_mix_channels': 0, # if not None, mix orbitals before det calc
               'orb_mix_dims': (32, 32), #
           },
           'bias_orbitals': False,  # include bias in last layer to orbitals
