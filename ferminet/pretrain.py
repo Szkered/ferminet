@@ -269,6 +269,6 @@ def pretrain_hartree_fock(
     logging.info('Pretrain iter %05d: %g', t, loss[0])
     if logger:
       logger(t, loss[0])
-    if FLAGS.use_wandb:
-      wandb.log(data={'pretrain_loss': loss[0]}, step=t)
+    # if FLAGS.use_wandb:
+    #   wandb.log(data={'pretrain_loss': loss[0]}, step=t)
   return params, data
