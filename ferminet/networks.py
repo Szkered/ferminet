@@ -480,7 +480,7 @@ def init_fermi_net_params(
         active_spin_channels=active_spin_channels,
         eps=eps)
 
-  if options.orb_mix_channels is not None:
+  if options.orb_mix_channels > 0:
     assert options.full_det
 
     # SYMMETRIC FEATURE EMBEDDING
@@ -741,7 +741,7 @@ def fermi_net_orbitals(
       jnp.reshape(orbital, shape) for orbital, shape in zip(orbitals, shapes)
   ]  # (alpha/beta, ndet, nelec)
 
-  if options.orb_mix_channels is not None:
+  if options.orb_mix_channels > 0:
     assert options.full_det
 
     elec_feats = construct_symmetric_features(ae_features, ee_features, nspins)
