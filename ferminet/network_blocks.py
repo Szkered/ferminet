@@ -330,7 +330,7 @@ def log_linear_layer(
       debug_stats['tau_loss'] += jax.nn.relu(jnp.abs(wx) - tau_target)
     else:
       wx = wx / tau[i]
-    wx = jnp.nan_to_num(wx)
+    # wx = jnp.nan_to_num(wx)
 
     # ACT+CILP
     act_fn = make_act_fn(activation[i])
@@ -348,7 +348,7 @@ def log_linear_layer(
       y = act_fn(wx)
 
     debug_stats[f'act_{i}'] = jnp.mean(y)
-    y = jnp.nan_to_num(y)
+    # y = jnp.nan_to_num(y)
 
     # RESIDUAL
     if i == len(params) - 1:  # last layer
@@ -358,7 +358,7 @@ def log_linear_layer(
       # convert back to log domain
       sign = jnp.sign(y)
       logy = jnp.log(sign * y)
-      logy = jnp.nan_to_num(logy)
+      # logy = jnp.nan_to_num(logy)
 
       # residual in log domain since input/x is in log domain
       if not has_extra_linear and residual == 'post_act' and logx.shape == logy.shape:
