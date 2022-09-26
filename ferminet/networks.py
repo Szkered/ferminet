@@ -759,11 +759,18 @@ def fermi_net_orbitals(
     orbs = jnp.concatenate(orbitals, axis=0)
     orbs = orbs.reshape(nelec, -1)  # [nelec, norbitals]
     norbitals = orbs.shape[1]
-    w = w.reshape(nelec, norbitals, -1)  # [nelec, norbitals, mix_channels]
-    # [nelec, nelec, mix_channels]
-    mixed_orbs = jax.vmap(lambda w, o: o @ w, in_axes=(0, None),
-                          out_axes=0)(w, orbs)
-    orbitals = [jnp.transpose(mixed_orbs, (2, 0, 1))]
+    # w = w.reshape(nelec, norbitals, -1)  # [nelec, norbitals, mix_channels]
+    w = w.reshape(-1, norbitals, nelec)  # (mix_channels, norbitals, nelec)
+    # (mix_channels, nelec(equiv), nelec)
+    # vmapped (nelec(equiv), norbitals) @ (norbitals, nelec)
+    mixed_orbs = jax.vmap(
+        lambda w, o: o @ w,
+        in_axes=(0, None),
+        out_axes=0,
+    )(w, orbs)
+
+    # orbitals = [jnp.transpose(mixed_orbs, (2, 1, 0))]
+    orbitals = [mixed_orbs]
 
   else:
     # (ndet, alpha/beta, nelec)
