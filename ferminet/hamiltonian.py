@@ -251,6 +251,14 @@ def local_energy(f: networks.FermiNetLike,
     v_ae = potential_electron_nuclear(charges, r_ae)
     v_aa = potential_nuclear_nuclear(charges, atoms)
     k_first, k_second = ke(params, data, v)
+
+    # z = jax.xla_computation(ke)(params, data, v)
+    # with open("t.txt", "w") as f:
+    #   f.write(z.as_hlo_text())
+    # with open("t.dot", "w") as f:
+    #   f.write(z.as_hlo_dot_graph())
+    # breakpoint()
+
     if FLAGS.log_debug_stats:
       stats = f_stats(params, data)
     else:
