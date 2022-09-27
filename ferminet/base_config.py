@@ -219,7 +219,8 @@ def default() -> ml_collections.ConfigDict:
               # 'act': ('xe_1', 'xe_1', 'xe_1'),  # activation inside nci
               # 'clip': (None, None, None), # if not none, activation becomes linear within [-clip, clip]
               'act': ('tanh', 'tanh'),  # activation inside nci
-              'clip': (1.0, 1.0), # if not none, activation becomes linear within [-clip, clip]
+              # 'clip': (1.0, 1.0), # if not none, activation becomes linear within [-clip, clip]
+              'clip': (None, None), # if not none, activation becomes linear within [-clip, clip]
               'leak': 1.0, # leak coeff for pre-act in clip range
               # 'tau': (1e-3, 1e-2),
               'tau': (1.0, 1.0),
