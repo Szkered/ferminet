@@ -54,9 +54,9 @@ def default() -> ml_collections.ConfigDict:
       'optim': {
           # 'grad_norm_reg': 1000.0,
           'grad_norm_reg': 0.0,
-          'logdet_reg_lambda': 1.0,
+          'logdet_reg_lambda': 0.0,
           'nci_w_reg_lambda': 0.0,
-          'tau_loss_lambda': 1.0,
+          'tau_loss_lambda': 0.0,
           'clip_lambda': 0.0,
           # 'tau_loss_lambda': 100.0,
           'iterations': 1000000,  # number of iterations
@@ -212,7 +212,7 @@ def default() -> ml_collections.ConfigDict:
           'activation': 'tanh',  # activation before the slater determinant
           'nci': {  # neural CI
               'enable': True,
-              'first_layer_in_log': True,
+              'first_layer_in_log': False,
               'remain_in_log': False,
               'dims': (512, 512),
               # 'dims': (32, 32),
@@ -221,7 +221,8 @@ def default() -> ml_collections.ConfigDict:
               'act': ('tanh', 'tanh'),  # activation inside nci
               'clip': (1.0, 1.0), # if not none, activation becomes linear within [-clip, clip]
               'leak': 1.0, # leak coeff for pre-act in clip range
-              'tau': (1e-3, 1e-2),
+              # 'tau': (1e-3, 1e-2),
+              'tau': (1.0, 1.0),
               'tau_target': None, # if not none, tune tau to make activation below the target
               'residual': 'post_act', # not used (always post_act)
               'softmax_w': True,
