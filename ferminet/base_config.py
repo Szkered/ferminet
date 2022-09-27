@@ -188,6 +188,7 @@ def default() -> ml_collections.ConfigDict:
               'after_determinants': (1,),
               'orb_mix_channels': 0, # if not None, mix orbitals before det calc
               'orb_mix_dims': (32, 32), #
+              'mix_all': True,
           },
           'bias_orbitals': False,  # include bias in last layer to orbitals
           # Whether to use the last layer of the two-electron stream of the
