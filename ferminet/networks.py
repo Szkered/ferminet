@@ -791,6 +791,10 @@ def fermi_net_orbitals(
       # w = w.reshape(nelec, norbitals, -1)  # [nelec, norbitals, mix_channels]
       w = w.reshape(-1, norbitals,
                     sum(nspins))  # (mix_channels, norbitals, nelec)
+
+      # normalize w
+      w = jax.nn.softmax(w, axis=1)
+
       # (mix_channels~ndet, nelec/nalpha/nbeta(equiv), nelec)
       # vmapped (nelec/nalpha/nbeta(equiv), norbitals) @ (norbitals, nelec)
       mixed_orbs = jax.vmap(
