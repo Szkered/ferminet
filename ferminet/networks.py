@@ -159,6 +159,7 @@ class FermiNetOptions:
   orb_mix_channels: Optional[int] = 1
   orb_mix_dims: Sequence[int] = (32, 32)
   mix_all: bool = True
+  fixed_mix: bool = True
   two_e: bool = True
   two_e_to_orbital: bool = True
   ndim: int = 3
@@ -506,23 +507,31 @@ def init_fermi_net_params(
     # note that this is equivalent to the ferminet way of producing determinant, but
     # this way each orbital is used multiple times
     final_out_dim = norbitals * options.orb_mix_channels * sum(nspins)
-
     n_spin_channels = 1 if options.mix_all else 2
     orb_mixes = []
-    for i in range(n_spin_channels):
-      orb_mix = []
-      final_out_dim = norbitals * options.orb_mix_channels * sum(nspins)
-      # if options.mix_all:
-      # else:
-      #   final_out_dim = norbitals * options.orb_mix_channels * nspins[i]
-      in_dim = dims_one_in[0]
-      for out_dim in options.orb_mix_dims + (final_out_dim,):
+
+    for _ in range(n_spin_channels):
+      if options.fixed_mix:
         key, subkey = jax.random.split(key)
-        orb_mix.append(
-            network_blocks.init_linear_layer(subkey,
-                                             in_dim=in_dim,
-                                             out_dim=out_dim))
-        in_dim = out_dim
+        orb_mix = (jax.random.normal(
+            subkey, shape=(options.orb_mix_channels, norbitals, sum(nspins))) /
+                   jnp.sqrt(float(norbitals)))
+
+      else:
+        orb_mix = []
+        final_out_dim = norbitals * options.orb_mix_channels * sum(nspins)
+        # if options.mix_all:
+        # else:
+        #   final_out_dim = norbitals * options.orb_mix_channels * nspins[i]
+        in_dim = dims_one_in[0]
+        for out_dim in options.orb_mix_dims + (final_out_dim,):
+          key, subkey = jax.random.split(key)
+          orb_mix.append(
+              network_blocks.init_linear_layer(subkey,
+                                               in_dim=in_dim,
+                                               out_dim=out_dim))
+          in_dim = out_dim
+
       orb_mixes.append(orb_mix)
 
     params['orb_mix'] = orb_mixes
@@ -756,54 +765,76 @@ def fermi_net_orbitals(
   if options.orb_mix_channels > 0:
     assert options.full_det
 
-    elec_feats = construct_symmetric_features(ae_features, ee_features, nspins)
-
-    if options.mix_all:
-      elec_feats_embed = act_fn(
-          network_blocks.linear_layer(elec_feats, **params['orb_mix'][0][0]))
-      invariant_feats = [elec_feats_embed.sum(0)]
-
-    else:  # mix per spin groups
-      elec_feats_channels = jnp.split(elec_feats,
-                                      active_spin_partitions,
-                                      axis=0)
-      elec_feats_embed_channels = [
-          act_fn(network_blocks.linear_layer(f, **params['orb_mix'][i][0]))
-          for i, f in enumerate(elec_feats_channels)
-      ]
-      invariant_feats = [f.sum(0) for f in elec_feats_embed_channels]
-
+    mixed_orbitals = []
     n_spin_channels = 1 if options.mix_all else 2
 
-    mixed_orbitals = []
-    for i in range(n_spin_channels):
-      w = invariant_feats[i]  # (embed_dim,)
-      for layer in params['orb_mix'][i][1:]:
-        w = act_fn(network_blocks.linear_layer(w, **layer))
+    if options.fixed_mix:
+      for i in range(n_spin_channels):
+        nelec = sum(nspins) if options.mix_all else nspins[i]
+        orbs = jnp.concatenate(orbitals,
+                               axis=0) if options.mix_all else orbitals[i]
+        orbs = orbs.reshape(nelec, -1)  # [nelec/nalpha/nbeta, norbitals]
 
-      # w shape = norbitals*mix_channels = (ndet*nalpha/nbeta)*mix_channels
-      nelec = sum(nspins) if options.mix_all else nspins[i]
-      # (nelec(equivariant dim), ndet, nelec)
-      orbs = jnp.concatenate(orbitals,
-                             axis=0) if options.mix_all else orbitals[i]
-      orbs = orbs.reshape(nelec, -1)  # [nelec/nalpha/nbeta, norbitals]
-      norbitals = orbs.shape[1]
-      # w = w.reshape(nelec, norbitals, -1)  # [nelec, norbitals, mix_channels]
-      w = w.reshape(-1, norbitals,
-                    sum(nspins))  # (mix_channels, norbitals, nelec)
+        w = params['orb_mix'][i]
 
-      # normalize w
-      w = jax.nn.softmax(w, axis=1)
+        # normalize w
+        # w = jax.nn.softmax(w, axis=1)
 
-      # (mix_channels~ndet, nelec/nalpha/nbeta(equiv), nelec)
-      # vmapped (nelec/nalpha/nbeta(equiv), norbitals) @ (norbitals, nelec)
-      mixed_orbs = jax.vmap(
-          lambda w, o: o @ w,
-          in_axes=(0, None),
-          out_axes=0,
-      )(w, orbs)
+        mixed_orbs = jax.vmap(
+            lambda w, o: o @ w,
+            in_axes=(0, None),
+            out_axes=0,
+        )(w, orbs)
 
-      mixed_orbitals.append(mixed_orbs)
+        mixed_orbitals.append(mixed_orbs)
+
+    else:
+      elec_feats = construct_symmetric_features(ae_features, ee_features,
+                                                nspins)
+
+      if options.mix_all:
+        elec_feats_embed = act_fn(
+            network_blocks.linear_layer(elec_feats, **params['orb_mix'][0][0]))
+        invariant_feats = [elec_feats_embed.sum(0)]
+
+      else:  # mix per spin groups
+        elec_feats_channels = jnp.split(elec_feats,
+                                        active_spin_partitions,
+                                        axis=0)
+        elec_feats_embed_channels = [
+            act_fn(network_blocks.linear_layer(f, **params['orb_mix'][i][0]))
+            for i, f in enumerate(elec_feats_channels)
+        ]
+        invariant_feats = [f.sum(0) for f in elec_feats_embed_channels]
+
+      for i in range(n_spin_channels):
+        w = invariant_feats[i]  # (embed_dim,)
+        for layer in params['orb_mix'][i][1:]:
+          w = act_fn(network_blocks.linear_layer(w, **layer))
+
+        # w shape = norbitals*mix_channels = (ndet*nalpha/nbeta)*mix_channels
+        nelec = sum(nspins) if options.mix_all else nspins[i]
+        # (nelec(equivariant dim), ndet, nelec)
+        orbs = jnp.concatenate(orbitals,
+                               axis=0) if options.mix_all else orbitals[i]
+        orbs = orbs.reshape(nelec, -1)  # [nelec/nalpha/nbeta, norbitals]
+        norbitals = orbs.shape[1]
+        # w = w.reshape(nelec, norbitals, -1)  # [nelec, norbitals, mix_channels]
+        w = w.reshape(-1, norbitals,
+                      sum(nspins))  # (mix_channels, norbitals, nelec)
+
+        # normalize w
+        w = jax.nn.softmax(w, axis=1)
+
+        # (mix_channels~ndet, nelec/nalpha/nbeta(equiv), nelec)
+        # vmapped (nelec/nalpha/nbeta(equiv), norbitals) @ (norbitals, nelec)
+        mixed_orbs = jax.vmap(
+            lambda w, o: o @ w,
+            in_axes=(0, None),
+            out_axes=0,
+        )(w, orbs)
+
+        mixed_orbitals.append(mixed_orbs)
 
     orbitals = mixed_orbitals
 
