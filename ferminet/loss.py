@@ -274,25 +274,25 @@ def make_loss(
     reg = 0.0
 
     # if logdet_reg_lambda > 0.0:
-    _, logdet_abs_tangent = jax.jvp(batch_logdet_abs, primals, tangents)
-    reg += logdet_reg_lambda * jnp.mean(logdet_abs_tangent)
+    # _, logdet_abs_tangent = jax.jvp(batch_logdet_abs, primals, tangents)
+    # reg += logdet_reg_lambda * jnp.mean(logdet_abs_tangent)
 
     # if grad_norm_reg > 0.0:
-    _, grad_norm_tangent = jax.jvp(batch_grad_norm, primals, tangents)
-    reg += grad_norm_reg * jnp.mean(grad_norm_tangent)
+    # _, grad_norm_tangent = jax.jvp(batch_grad_norm, primals, tangents)
+    # reg += grad_norm_reg * jnp.mean(grad_norm_tangent)
 
-    if 'nci' in params.keys():
-      # if nci_w_reg_lambda > 0.0:
-      reg += nci_w_reg_lambda * aux_data.stats['nci_w_norm']
+    # if 'nci' in params.keys():
+    #   # if nci_w_reg_lambda > 0.0:
+    #   reg += nci_w_reg_lambda * aux_data.stats['nci_w_norm']
 
-      # if 'tau' in params['nci'][0].keys() and tau_loss_lambda > 0.0:
-      if 'tau' in params['nci'][0].keys():
-        _, tau_loss_tangent = jax.jvp(batch_tau_loss, primals, tangents)
-        reg += tau_loss_lambda * jnp.mean(tau_loss_tangent)
+    #   # if 'tau' in params['nci'][0].keys() and tau_loss_lambda > 0.0:
+    #   if 'tau' in params['nci'][0].keys():
+    #     _, tau_loss_tangent = jax.jvp(batch_tau_loss, primals, tangents)
+    #     reg += tau_loss_lambda * jnp.mean(tau_loss_tangent)
 
-    if clip_lambda > 0.0:
-      _, clip_loss_tangent = jax.jvp(batch_clip_loss, primals, tangents)
-      reg += clip_lambda * jnp.mean(clip_loss_tangent)
+    # if clip_lambda > 0.0:
+    #   _, clip_loss_tangent = jax.jvp(batch_clip_loss, primals, tangents)
+    #   reg += clip_lambda * jnp.mean(clip_loss_tangent)
 
     tangents_out = ((grad_est + reg) / device_batch_size, aux_data)
     return primals_out, tangents_out
