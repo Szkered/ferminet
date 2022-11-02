@@ -27,7 +27,8 @@ REQUIRED_PACKAGES = [
     'jax',
     'jaxlib',
     # TODO(b/230487443) - use released version of kfac.
-    'kfac_jax @ git+https://github.com/deepmind/kfac-jax',
+    # 'kfac_jax @ git+https://github.com/deepmind/kfac-jax',
+    'kfac_jax',
     'ml-collections',
     'optax',
     'numpy',
@@ -49,7 +50,8 @@ def ferminet_test_suite():
 setup(
     name='ferminet',
     version='0.2',
-    description='A library to train networks to represent ground state wavefunctions of fermionic systems',
+    description=
+    'A library to train networks to represent ground state wavefunctions of fermionic systems',
     url='https://github.com/deepmind/ferminet',
     author='DeepMind',
     author_email='no-reply@google.com',

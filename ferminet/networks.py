@@ -186,6 +186,7 @@ class FermiNetOptions:
   nci_tau_target: bool = False
   nci_trainable_clip: bool = False
   nci_leak: float = 0.5
+  normalize_w: bool = True
 
 
 ## Network initialisation ##
@@ -771,8 +772,8 @@ def fermi_net_orbitals(
 
         w = params['orb_mix'][i]
 
-        # normalize w
-        # w = jax.nn.softmax(w, axis=1)
+        if options.normalize_w:
+          w = jax.nn.softmax(w, axis=1)
 
         mixed_orbs = jax.vmap(
             lambda w, o: o @ w,
@@ -825,20 +826,21 @@ def fermi_net_orbitals(
                       sum(nspins))  # (mix_channels, norbitals, nelec)
 
         # normalize w
-        # w = jax.nn.softmax(w, axis=1)
+        if options.normalize_w:
+          w = jax.nn.softmax(w, axis=1)
         # w = jnp.exp(w)
 
         # (mix_channels~ndet, nelec/nalpha/nbeta(equiv), nelec)
         # vmapped (nelec/nalpha/nbeta(equiv), norbitals) @ (norbitals, nelec)
 
-        # mixed_orbs = jax.vmap(
-        #     lambda w, o: o @ w,
-        #     in_axes=(0, None),
-        #     out_axes=0,
-        # )(w, orbs)
+        mixed_orbs = jax.vmap(
+            lambda w, o: o @ w,
+            in_axes=(0, None),
+            out_axes=0,
+        )(w, orbs)
 
-        mixed_orbs = orbs @ w[0]
-        mixed_orbs = mixed_orbs[None, :]
+        # mixed_orbs = orbs @ w[0]
+        # mixed_orbs = mixed_orbs[None, :]
 
         mixed_orbitals.append(mixed_orbs)
 
