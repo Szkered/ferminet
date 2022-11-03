@@ -187,6 +187,7 @@ class FermiNetOptions:
   nci_trainable_clip: bool = False
   nci_leak: float = 0.5
   normalize_w: bool = True
+  share_feature: bool = True
 
 
 ## Network initialisation ##
@@ -521,11 +522,10 @@ def init_fermi_net_params(
       else:
         orb_mix = []
         final_out_dim = norbitals * options.orb_mix_channels * sum(nspins)
-        # if options.mix_all:
-        # else:
-        #   final_out_dim = norbitals * options.orb_mix_channels * nspins[i]
-        # in_dim = dims_one_in[0]
-        in_dim = options.hidden_dims[-1][0] * 2
+        if options.share_feature:
+          in_dim = options.hidden_dims[-1][0] * 2
+        else:
+          in_dim = dims_one_in[0]
         for out_dim in options.orb_mix_dims + (final_out_dim,):
           key, subkey = jax.random.split(key)
           orb_mix.append(
@@ -784,18 +784,21 @@ def fermi_net_orbitals(
         mixed_orbitals.append(mixed_orbs)
 
     else:
-      # elec_feats = construct_symmetric_features(ae_features, ee_features,
-      #                                           nspins)
+      if options.share_feature:
+        assert options.mix_all
+        # last_h_dim * 2
+        elec_feats = jnp.concatenate([h.mean(0) for h in h_to_orbitals])
+      else:
+        elec_feats = construct_symmetric_features(ae_features, ee_features,
+                                                  nspins)
 
-      assert options.mix_all
-
-      # last_h_dim * 2
-      elec_feats = jnp.concatenate([h.mean(0) for h in h_to_orbitals])
       if options.mix_all:
         elec_feats_embed = act_fn(
             network_blocks.linear_layer(elec_feats, **params['orb_mix'][0][0]))
-        # invariant_feats = [elec_feats_embed.sum(0)]
-        invariant_feats = elec_feats_embed
+        if options.share_feature:
+          invariant_feats = elec_feats_embed
+        else:
+          invariant_feats = [elec_feats_embed.sum(0)]
 
       else:  # mix per spin groups
         elec_feats_channels = jnp.split(elec_feats,
@@ -828,7 +831,6 @@ def fermi_net_orbitals(
         # normalize w
         if options.normalize_w:
           w = jax.nn.softmax(w, axis=1)
-        # w = jnp.exp(w)
 
         # (mix_channels~ndet, nelec/nalpha/nbeta(equiv), nelec)
         # vmapped (nelec/nalpha/nbeta(equiv), norbitals) @ (norbitals, nelec)
@@ -838,9 +840,6 @@ def fermi_net_orbitals(
             in_axes=(0, None),
             out_axes=0,
         )(w, orbs)
-
-        # mixed_orbs = orbs @ w[0]
-        # mixed_orbs = mixed_orbs[None, :]
 
         mixed_orbitals.append(mixed_orbs)
 

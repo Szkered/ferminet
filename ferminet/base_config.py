@@ -177,7 +177,7 @@ def default() -> ml_collections.ConfigDict:
       },
       'network': {
           'detnet': {
-              'two_e': True, # whether to use 2e stream
+              'two_e': False, # whether to use 2e stream
               'two_e_to_orbital': False, # whether to pass 2e features directly to orbitals
               # 'hidden_dims': ((256, 32), (256, 32), (256, 32), (256, 32)),
               # 'hidden_dims': ((128, 16), (128, 16), (128, 16), (128, 16)),
@@ -192,7 +192,8 @@ def default() -> ml_collections.ConfigDict:
               'orb_mix_dims': (16, 16), #
               'mix_all': True,
               'fixed_mix': False, # if False, the mix weights are functions of configuration
-              'normalize_w': True,
+              'normalize_w': False,
+              'share_feature': True, # if False, CI weight use separate feature extractor
           },
           'bias_orbitals': False,  # include bias in last layer to orbitals
           # Whether to use the last layer of the two-electron stream of the
