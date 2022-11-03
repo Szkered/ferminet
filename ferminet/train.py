@@ -49,6 +49,38 @@ import wandb
 
 FLAGS = flags.FLAGS
 
+# REF. PhysRevA.47.3649 - Ground-state correlation energies for atomic ions with 3 to 18 electrons
+corr_energy = {
+    "atom": {
+        "Li": 0.04533,
+        "Be": 0.09434,
+        "B": 0.12485,
+        "C": 0.1564,
+        "N": 0.18831,
+        "O": 0.25794,
+        "F": 0.32453,
+        "Ne": 0.39047,
+        "Na": 0.39564,
+        "Mg": 0.43828,
+        "Al": 0.46960,
+        "Si": 0.50503,
+        "P": 0.54026,
+        "S": 0.60476,
+        "Cl": 0.66598,
+        "Ar": 0.72216,
+        "K": 0.73866,
+        "Ca": 0.75368,
+        "Sc": 0.76776,
+        "Ti": 0.78114,
+        "V": 0.79398,
+        "Cr": 0.80636,
+        "Mn": 0.81837,
+        "Fe": 0.83005,
+        "Co": 0.84143,
+        "Ni": 0.85255,
+    },
+}
+
 # Hatree-Fock energy (no corr)
 hf_energy = {
     "atom": {
@@ -72,6 +104,7 @@ hf_energy = {
     }
 }
 
+# REF. PhysRevA.47.3649 - Ground-state correlation energies for atomic ions with 3 to 18 electrons
 # TODO(@shizk): geometries of bicbut is different from the paper?
 # CCSD(T)/CBS or other accuracy values
 exact_energy = {
@@ -84,6 +117,24 @@ exact_energy = {
         "O": -75.0673,
         "F": -99.7339,
         "Ne": -128.9376,
+        "Na": -162.2546,
+        "Mg": -200.053,
+        "Al": -242.346,
+        "Si": -289.359,
+        "P": -341.259,
+        "S": -398.110,
+        "Cl": -460.148,
+        "Ar": -527.540,
+        "K": -599.756,
+        "Ca": -676.908,
+        "Sc": -758.893,
+        "Ti": -845.972,
+        "V": -937.870,
+        "Cr": -1034.674,
+        "Mn": -1136.380,
+        "Fe": -1242.985,
+        "Co": -1354.489,
+        "Ni": -1470.889,
     },
     "diatomic": {
         "LiH": -8.070548,
