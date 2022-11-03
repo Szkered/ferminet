@@ -193,7 +193,8 @@ def default() -> ml_collections.ConfigDict:
               'mix_all': True,
               'fixed_mix': False, # if False, the mix weights are functions of configuration
               'normalize_w': False,
-              'share_feature': True, # if False, CI weight use separate feature extractor
+              'share_feature': False, # if False, CI weight use separate feature extractor
+              'feat_type': 'old',
           },
           'bias_orbitals': False,  # include bias in last layer to orbitals
           # Whether to use the last layer of the two-electron stream of the

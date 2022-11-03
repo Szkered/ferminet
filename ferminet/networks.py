@@ -188,6 +188,7 @@ class FermiNetOptions:
   nci_leak: float = 0.5
   normalize_w: bool = True
   share_feature: bool = True
+  feat_type: str = 'new'
 
 
 ## Network initialisation ##
@@ -525,7 +526,10 @@ def init_fermi_net_params(
         if options.share_feature:
           in_dim = options.hidden_dims[-1][0] * 2
         else:
-          in_dim = dims_one_in[0]
+          if options.feat_type == "old":
+            in_dim = dims_one_in[0]
+          elif options.feat_type == "new":
+            in_dim = natom * 8 + 8  # (3d + r features) * spins = 4*2 = 8
         for out_dim in options.orb_mix_dims + (final_out_dim,):
           key, subkey = jax.random.split(key)
           orb_mix.append(
@@ -609,8 +613,10 @@ def make_ferminet_features(charges: Optional[jnp.ndarray] = None,
   return FeatureLayer(init=init, apply=apply)
 
 
-def construct_symmetric_features(h_one: jnp.ndarray, h_two: jnp.ndarray,
-                                 nspins: Tuple[int, int]) -> jnp.ndarray:
+def construct_symmetric_features(h_one: jnp.ndarray,
+                                 h_two: jnp.ndarray,
+                                 nspins: Tuple[int, int],
+                                 ci: bool = False) -> jnp.ndarray:
   """Combines intermediate features from rank-one and -two streams.
 
   Args:
@@ -637,9 +643,21 @@ def construct_symmetric_features(h_one: jnp.ndarray, h_two: jnp.ndarray,
   g_one = [jnp.mean(h, axis=0, keepdims=True) for h in h_ones if h.size > 0]
   g_two = [jnp.mean(h, axis=0) for h in h_twos if h.size > 0]
 
-  g_one = [jnp.tile(g, [h_one.shape[0], 1]) for g in g_one]
+  if ci:
+    g_two = [
+        jnp.mean(g_two[0][:nspins[0]], axis=0, keepdims=True),
+        jnp.mean(g_two[1][-nspins[1]:], axis=0, keepdims=True)
+    ]
 
-  return jnp.concatenate([h_one] + g_one + g_two, axis=1)
+    ret = jnp.concatenate(g_one + g_two, axis=1)
+
+    return ret
+
+  else:
+
+    g_one = [jnp.tile(g, [h_one.shape[0], 1]) for g in g_one]
+
+    return jnp.concatenate([h_one] + g_one + g_two, axis=1)
 
 
 def fermi_net_orbitals(
@@ -789,8 +807,14 @@ def fermi_net_orbitals(
         # last_h_dim * 2
         elec_feats = jnp.concatenate([h.mean(0) for h in h_to_orbitals])
       else:
-        elec_feats = construct_symmetric_features(ae_features, ee_features,
-                                                  nspins)
+        if options.feat_type == "old":
+          elec_feats = construct_symmetric_features(ae_features, ee_features,
+                                                    nspins)
+        elif options.feat_type == "new":
+          elec_feats = construct_symmetric_features(ae_features,
+                                                    ee_features,
+                                                    nspins,
+                                                    ci=True)
 
       if options.mix_all:
         elec_feats_embed = act_fn(
