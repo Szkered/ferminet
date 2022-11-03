@@ -796,7 +796,11 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
         if system_name in exact_energy[system_type].keys():
           le = info["local_energy"]
           exact = exact_energy[system_type][system_name]
-          hf = hf_energy[system_type][system_name]
+          if system_name not in hf_energy[system_type].keys(
+          ) and system_name in corr_energy[system_type].keys():
+            hf = exact + corr_energy[system_type][system_name]
+          else:
+            hf = hf_energy[system_type][system_name]
           info["error"] = le - exact
           corr_cap = 0.0
           if le < hf:  # corr is only valid when reach hf level
