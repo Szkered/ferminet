@@ -189,6 +189,7 @@ class FermiNetOptions:
   normalize_w: bool = True
   share_feature: bool = True
   feat_type: str = 'new'
+  orb_mix_res: bool = False
 
 
 ## Network initialisation ##
@@ -838,7 +839,11 @@ def fermi_net_orbitals(
         w = invariant_feats[i]  # (embed_dim,)
         # w /= w
         for layer in params['orb_mix'][i][1:]:
-          w = act_fn(network_blocks.linear_layer(w, **layer))
+          w_next = act_fn(network_blocks.linear_layer(w, **layer))
+          if options.orb_mix_res:
+            w = residual(w, w_next)
+          else:
+            w = w_next
 
         # w shape = norbitals*mix_channels = (ndet*nalpha/nbeta)*mix_channels
         nelec = sum(nspins) if options.mix_all else nspins[i]

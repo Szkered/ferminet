@@ -190,6 +190,7 @@ def default() -> ml_collections.ConfigDict:
               'after_determinants': (1,),
               'orb_mix_channels': 0, # if not None, mix orbitals before det calc
               'orb_mix_dims': (16, 16), #
+              'orb_mix_res': False, #
               'mix_all': True,
               'fixed_mix': False, # if False, the mix weights are functions of configuration
               'normalize_w': False,
