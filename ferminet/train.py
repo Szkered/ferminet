@@ -766,7 +766,7 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
       # per batch variance isn't informative. Use weighted mean and variance
       # instead.
       weighted_stats = statistics.exponentialy_weighted_stats(
-          alpha=0.1, observation=loss, previous_stats=weighted_stats)
+          alpha=0.03, observation=loss, previous_stats=weighted_stats)
       pmove = pmove[0]
 
       # Update MCMC move width
@@ -791,7 +791,8 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
                          aux_data))
         info = {**info, **info['stats']}
         del info['stats']
-        info["weighted_var"] = weighted_stats.variance
+        info["ema_mean"] = weighted_stats.mean
+        info["ema_var"] = weighted_stats.variance
         info["pmove"] = pmove
         if system_name in exact_energy[system_type].keys():
           le = info["local_energy"]
