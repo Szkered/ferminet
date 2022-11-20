@@ -803,6 +803,7 @@ def train(cfg: ml_collections.ConfigDict, writer_manager=None):
           else:
             hf = hf_energy[system_type][system_name]
           info["error"] = le - exact
+          info["ema_error"] = weighted_stats.mean - exact
           corr_cap = 0.0
           if le < hf:  # corr is only valid when reach hf level
             corr_cap = (le - hf) / (exact - hf) * 100
